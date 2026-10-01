@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XOLVE: a daily algebra puzzle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="generator.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1 class="logo" aria-label="XOLVE"><i>X</i>OLVE</h1>
+    <div class="tools">
+      <button class="icon-btn" id="btnHelp" aria-label="How to play">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4.1"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg>
+      </button>
+      <button class="icon-btn" id="btnStats" aria-label="Statistics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="modes" aria-label="Game mode">
+    <button class="mode" data-mode="daily" aria-pressed="true">Daily</button>
+    <button class="mode" data-mode="archive" aria-pressed="false">Archive</button>
+    <button class="mode" data-mode="practice" aria-pressed="false">Practice</button>
+  </nav>
+  <div class="levels" id="levels" hidden role="group" aria-label="Practice difficulty">
+    <button class="level" data-level="easy">Easy</button>
+    <button class="level" data-level="medium">Medium</button>
+    <button class="level" data-level="hard">Hard</button>
+    <button class="level" data-level="expert">Expert</button>
+  </div>
+
+  <section class="archive" id="archive" hidden aria-label="Past puzzles">
+    <ol class="arch-list" id="archList"></ol>
+    <div class="arch-empty" id="archEmpty" hidden>
+      <p id="archEmptyText"></p>
+      <button class="check" id="btnToday">Play today's puzzle</button>
+    </div>
+  </section>
+
+  <div style="text-align:center"><button class="back" id="btnBack" hidden>Back to archive</button></div>
+  <main class="sheet" id="sheet">
+    <p class="meta"><span id="puzzleLabel"></span><span class="pips" id="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></span><span id="levelLabel"></span></p>
+    <p class="prompt">Solve for <var>x</var></p>
+    <div class="eq-wrap" id="eqWrap"><div class="equation" id="equation" role="img"></div></div>
+
+    <div class="answer" id="answerRow">
+      <label class="xeq" for="guess"><var>x</var> =</label>
+      <input id="guess" inputmode="numeric" autocomplete="off" enterkeyhint="go" aria-describedby="msg">
+      <button class="check" id="btnCheck">Check</button>
+    </div>
+    <div class="final" id="final" hidden></div>
+    <p class="msg" id="msg" aria-live="polite"></p>
+    <ul class="tries" id="tries" aria-label="Wrong answers"></ul>
+
+    <div class="status" id="status">
+      <span id="streakStat"></span>
+      <span>Attempts <b id="attemptsStat">0</b> of 6</span>
+      <span>Time <b id="timeStat">0:00</b></span>
+    </div>
+    <button class="reveal-btn" id="btnReveal">Reveal the answer</button>
+
+    <section class="result" id="result" hidden>
+      <p class="verdict" id="verdict"></p>
+      <p class="summary" id="summary"></p>
+      <div class="work">
+        <h2>Worked solution</h2>
+        <div class="steps-scroll"><ol class="steps" id="steps"></ol></div>
+      </div>
+      <div class="actions">
+        <button class="check" id="btnShare">Share result</button>
+        <button class="ghost" id="btnNew" hidden>New puzzle</button>
+        <button class="ghost" id="btnPractice">Practise more</button>
+        <button class="ghost" id="btnArchiveBack" hidden>Back to archive</button>
+      </div>
+      <p class="next" id="next"></p>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlgStats" aria-labelledby="statsTitle">
+  <div class="dlg-head"><h2 id="statsTitle">Statistics</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="figs" id="figs"></div>
+  <div class="dist">
+    <h3>Solved by difficulty</h3>
+    <div id="dist"></div>
+  </div>
+</dialog>
+
+<dialog id="dlgHelp" aria-labelledby="helpTitle">
+  <div class="dlg-head"><h2 id="helpTitle">How to play</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="help">
+    <p>Every day there is one new equation. Work out the value of <var>x</var> and enter it. You get 6 attempts, and <var>x</var> is always a whole number.</p>
+    <div class="example">7(<var>x</var> + 4) = 42 &nbsp;gives&nbsp; <var>x</var> = 2</div>
+    <p>Puzzles get harder through the week: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, expert at the weekend.</p>
+    <p>When you finish, you'll see the worked solution. Solve on consecutive days to build a streak.</p>
+    <p>A new puzzle goes live at midnight in your time zone. Missed one? Play it from the archive. Archive puzzles don't affect your streak or statistics.</p>
+    <p>Practice gives you unlimited puzzles at any level. They don't count towards your statistics either.</p>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+</body>
+</html>
