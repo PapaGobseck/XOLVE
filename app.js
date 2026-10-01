@@ -152,15 +152,53 @@ function render() {
   renderTries();
   renderStatus();
 
+  renderHints();
   $('result').hidden = playing;
   $('final').hidden = playing;
   if (!playing) renderResult();
   else { $('guess').value = ''; if (window.matchMedia('(hover: hover)').matches) $('guess').focus({ preventScroll: true }); }
 }
 function renderTries() {
-  const wrong = game.attempts.filter((a) => !a.correct);
+  const wrong = game.attempts.filter((a) => !a.hint && !a.correct);
   $('tries').innerHTML = wrong.map((a) => `<li><span class="sr">Not </span>${esc(a.value)}</li>`).join('');
 }
+/* ---------- hints ----------
+   Hint 1 shows the first instruction. Each later hint shows where the previous
+   instruction leads, plus the next instruction. The final line (x = ...) is never shown. */
+const hintCount = () => game.attempts.filter((a) => a.hint).length;
+const maxHints = () => game.puzzle.solutionSteps.length - 1;
+const noteHTML = (note) => esc(note).replace(/(^|[\s\d\u2212])x\b/g, '$1<var>x</var>');
+function renderHints(animateLast) {
+  const playing = game.status === 'playing', h = hintCount();
+  const box = $('hints'), btn = $('btnHint');
+  box.hidden = !playing || h === 0;
+  btn.hidden = !playing;
+  if (playing && h > 0) {
+    const s = game.puzzle.solutionSteps;
+    const row = (st, showNote, showEq, cls) => `<li${cls ? ` class="${cls}"` : ''}>${showNote ? `<span class="note">${noteHTML(st.note)}</span>` : ''}${showEq ? `<span class="l">${toHTML(st.lhs)}</span><span>=</span><span class="r">${toHTML(st.rhs)}</span>` : ''}</li>`;
+    let html = row(s[0], false, true);
+    for (let i = 1; i <= h; i++) {
+      // The note for step i is new on hint i; its result line appears on hint i + 1.
+      html += `<li${animateLast && i === h ? ' class="new"' : ''}><span class="note">${noteHTML(s[i].note)}</span></li>`;
+      if (i < h) html += row(s[i], false, true, animateLast && i === h - 1 ? 'new' : '');
+    }
+    $('hintSteps').innerHTML = html;
+  }
+  const left = MAX_ATTEMPTS - game.attempts.length;
+  if (h >= maxHints()) { btn.disabled = true; $('hintLabel').textContent = 'No more hints'; $('hintCost').textContent = 'The next step is the answer'; }
+  else if (left <= 1) { btn.disabled = true; $('hintLabel').textContent = 'No hints left'; $('hintCost').textContent = 'Save your last attempt to answer'; }
+  else { btn.disabled = false; $('hintLabel').textContent = h ? 'Next hint' : 'Get a hint'; $('hintCost').textContent = 'Uses 1 attempt'; }
+}
+function useHint() {
+  if (game.status !== 'playing' || hintCount() >= maxHints() || MAX_ATTEMPTS - game.attempts.length <= 1) return;
+  game.attempts.push({ hint: true });
+  const left = MAX_ATTEMPTS - game.attempts.length;
+  say(`Hint used. ${left} ${left === 1 ? 'attempt' : 'attempts'} left.`);
+  renderHints(true);
+  renderStatus();
+  saveGame();
+}
+
 function renderStatus() {
   const st = loadStats();
   const streak = liveStreak(st, today.epochDay);
@@ -180,8 +218,10 @@ function renderResult() {
   $('verdict').textContent = won ? (n === 1 ? 'Correct, first time' : 'Correct') : 'Not this time';
   const st = loadStats();
   const streak = liveStreak(st, today.epochDay);
+  const hints = hintCount();
+  const hintNote = hints ? ` including ${hints} ${hints === 1 ? 'hint' : 'hints'}` : '';
   let summary = won
-    ? `Solved in ${n} ${n === 1 ? 'attempt' : 'attempts'}, ${fmtTime(game.elapsed)}.`
+    ? `Solved in ${n} ${n === 1 ? 'attempt' : 'attempts'}${hintNote}, ${fmtTime(game.elapsed)}.`
     : `The answer was ${p.answer}. Here's how to get there.`;
   $('summary').textContent = summary;
 
@@ -227,7 +267,7 @@ function submit() {
   if (!input.value.trim()) { say('Enter a value for x.'); return; }
   const a = parseAnswer(input.value);
   if (!a) { say('Enter a number, like 7.'); shake(); return; }
-  if (game.attempts.some((t) => Math.abs(parseAnswer(t.value).value - a.value) < 1e-9)) { say(`You've already tried ${a.label}.`); shake(); return; }
+  if (game.attempts.some((t) => !t.hint && Math.abs(parseAnswer(t.value).value - a.value) < 1e-9)) { say(`You've already tried ${a.label}.`); shake(); return; }
   const correct = isCorrect(a, game.puzzle.answer);
   game.attempts.push({ value: a.label, correct });
   if (correct) return finish('won');
@@ -238,6 +278,7 @@ function submit() {
   shake();
   renderTries();
   renderStatus();
+  renderHints();
   saveGame();
 }
 function say(t) { $('msg').textContent = t; }
@@ -298,7 +339,7 @@ function updateCountdown() {
 /* ---------- sharing ---------- */
 function shareText() {
   const p = game.puzzle, won = game.status === 'won';
-  const squares = game.attempts.map((a) => (a.correct ? '🟩' : '🟥')).join('');
+  const squares = game.attempts.map((a) => (a.hint ? '💡' : a.correct ? '🟩' : '🟥')).join('');
   const streak = liveStreak(loadStats(), today.epochDay);
   return [`XOLVE #${p.id} (${LEVEL_NAMES[p.difficulty]}${game.kind === 'archive' ? ', archive' : ''})`,
     `${squares} ${won ? `${game.attempts.length}/6 in ${fmtTime(game.elapsed)}` : 'X/6'}`,
@@ -361,6 +402,13 @@ $('archList').addEventListener('click', (e) => {
 });
 $('btnStats').addEventListener('click', openStats);
 $('btnHelp').addEventListener('click', () => $('dlgHelp').showModal());
+$('btnBook').addEventListener('click', () => $('dlgBook').showModal());
+$('btnHint').addEventListener('click', useHint);
+$('btnHome').addEventListener('click', () => {
+  document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+  setMode('daily');
+  window.scrollTo({ top: 0 });
+});
 document.querySelectorAll('dialog').forEach((d) => {
   d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
 });

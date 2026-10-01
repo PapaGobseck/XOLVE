@@ -14,8 +14,11 @@
 <body>
 <div class="app">
   <header>
-    <h1 class="logo" aria-label="XOLVE"><i>X</i>OLVE</h1>
+    <h1 class="logo"><button class="logo-btn" id="btnHome" aria-label="XOLVE, go to today's puzzle"><i>X</i>OLVE</button></h1>
     <div class="tools">
+      <button class="icon-btn" id="btnBook" aria-label="Formula book">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5v13"/></svg>
+      </button>
       <button class="icon-btn" id="btnHelp" aria-label="How to play">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4.1"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg>
       </button>
@@ -60,6 +63,11 @@
     <p class="msg" id="msg" aria-live="polite"></p>
     <ul class="tries" id="tries" aria-label="Wrong answers"></ul>
 
+    <section class="hints" id="hints" hidden aria-label="Hints">
+      <ol class="steps" id="hintSteps"></ol>
+    </section>
+    <button class="hint-btn" id="btnHint"><span id="hintLabel">Get a hint</span><small id="hintCost">Uses 1 attempt</small></button>
+
     <div class="status" id="status">
       <span id="streakStat"></span>
       <span>Attempts <b id="attemptsStat">0</b> of 6</span>
@@ -94,12 +102,69 @@
   </div>
 </dialog>
 
+<dialog id="dlgBook" class="book-dlg" aria-labelledby="bookTitle">
+  <div class="dlg-head"><h2 id="bookTitle">Formula book</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="book">
+    <h3>Keep it balanced</h3>
+    <p>An equation is like a set of scales. Whatever you do to one side, do exactly the same to the other, and it stays true.</p>
+    <div class="ex"><span class="eqn"><var>x</var> + 4 = 10</span><span class="why">subtract 4 from both sides</span><span class="eqn"><var>x</var> = 6</span></div>
+
+    <h3>Undo with the opposite</h3>
+    <p>To get <var>x</var> on its own, undo what's been done to it using the inverse operation.</p>
+    <table>
+      <thead><tr><th>You see</th><th>Do this to both sides</th></tr></thead>
+      <tbody>
+        <tr><td><var>x</var> + 5</td><td>Subtract 5</td></tr>
+        <tr><td><var>x</var> − 5</td><td>Add 5</td></tr>
+        <tr><td>5<var>x</var></td><td>Divide by 5</td></tr>
+        <tr><td><span class="frac"><span class="fn"><var>x</var></span><span class="fd">5</span></span></td><td>Multiply by 5</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Reading the notation</h3>
+    <p>5<var>x</var> means 5 × <var>x</var>. A number written in front of a bracket multiplies everything inside it, so 3(<var>x</var> + 2) means 3 × (<var>x</var> + 2). A fraction line means divide: <span class="frac"><span class="fn"><var>x</var></span><span class="fd">4</span></span> is <var>x</var> ÷ 4.</p>
+
+    <h3>Order of operations (BIDMAS)</h3>
+    <p>Calculations happen in this order: <b>B</b>rackets, <b>I</b>ndices, <b>D</b>ivision and <b>M</b>ultiplication, <b>A</b>ddition and <b>S</b>ubtraction. When solving, undo them in reverse: deal with adding and subtracting first, then multiplying and dividing, then brackets.</p>
+    <div class="ex"><span class="eqn">2<var>x</var> + 3 = 11</span><span class="why">subtract 3 first, then divide by 2</span><span class="eqn"><var>x</var> = 4</span></div>
+
+    <h3>Brackets</h3>
+    <p>Either divide both sides by the number outside the bracket, or expand it by multiplying each term inside:</p>
+    <div class="ex"><span class="eqn">a(b + c) = ab + ac</span><span class="why">for example</span><span class="eqn">3(<var>x</var> + 4) = 3<var>x</var> + 12</span></div>
+    <p>A minus sign in front of a bracket changes every sign inside: −(<var>x</var> + 3) = −<var>x</var> − 3, and −2(<var>x</var> − 5) = −2<var>x</var> + 10.</p>
+    <p>Square brackets are just brackets. They're used when one bracket sits inside another, and you work from the outside in.</p>
+    <div class="ex"><span class="eqn">4[5(<var>x</var> − 3) + 8] = 212</span><span class="why">divide by 4 first</span><span class="eqn">5(<var>x</var> − 3) + 8 = 53</span></div>
+
+    <h3>Collecting like terms</h3>
+    <p>Terms with <var>x</var> combine with each other, and plain numbers combine with each other.</p>
+    <div class="ex"><span class="eqn">4<var>x</var> + 7 + 2<var>x</var> = 6<var>x</var> + 7</span></div>
+
+    <h3><var>x</var> on both sides</h3>
+    <p>Subtract the smaller <var>x</var> term from both sides, so <var>x</var> only appears once.</p>
+    <div class="ex"><span class="eqn">5<var>x</var> + 2 = 3<var>x</var> + 10</span><span class="why">subtract 3<var>x</var> from both sides</span><span class="eqn">2<var>x</var> + 2 = 10</span></div>
+
+    <h3>Fractions</h3>
+    <p>Multiply both sides by the number on the bottom to clear the fraction. With more than one fraction, multiply by the lowest common denominator: the smallest number they all divide into.</p>
+    <div class="ex"><span class="eqn"><span class="frac"><span class="fn"><var>x</var> + 3</span><span class="fd">2</span></span> = 5</span><span class="why">multiply both sides by 2</span><span class="eqn"><var>x</var> + 3 = 10</span></div>
+    <div class="ex"><span class="eqn"><span class="frac"><span class="fn"><var>x</var></span><span class="fd">2</span></span> + <span class="frac"><span class="fn"><var>x</var></span><span class="fd">3</span></span> = 5</span><span class="why">multiply both sides by 6</span><span class="eqn">3<var>x</var> + 2<var>x</var> = 30</span></div>
+
+    <h3>Negative numbers</h3>
+    <p>Two minuses multiplied or divided make a plus. Dividing a negative by a negative gives a positive answer.</p>
+    <div class="ex"><span class="eqn">−3<var>x</var> = −12</span><span class="why">divide both sides by −3</span><span class="eqn"><var>x</var> = 4</span></div>
+
+    <h3>Check your answer</h3>
+    <p>Put your value of <var>x</var> back into the original equation. If both sides come out the same, you're right.</p>
+    <div class="ex"><span class="eqn">3(<var>x</var> + 4) = 21 with <var>x</var> = 3</span><span class="why">3 × 7 = 21</span><span class="eqn">✓</span></div>
+  </div>
+</dialog>
+
 <dialog id="dlgHelp" aria-labelledby="helpTitle">
   <div class="dlg-head"><h2 id="helpTitle">How to play</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="help">
     <p>Every day there is one new equation. Work out the value of <var>x</var> and enter it. You get 6 attempts, and <var>x</var> is always a whole number.</p>
     <div class="example">7(<var>x</var> + 4) = 42 &nbsp;gives&nbsp; <var>x</var> = 2</div>
     <p>Puzzles get harder through the week: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, expert at the weekend.</p>
+    <p>Stuck? Each hint reveals the next step of the working, and uses one of your attempts. Hints never give away the final answer. The formula book (the book icon) explains the rules for free.</p>
     <p>When you finish, you'll see the worked solution. Solve on consecutive days to build a streak.</p>
     <p>A new puzzle goes live at midnight in your time zone. Missed one? Play it from the archive. Archive puzzles don't affect your streak or statistics.</p>
     <p>Practice gives you unlimited puzzles at any level. They don't count towards your statistics either.</p>
