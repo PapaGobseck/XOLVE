@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="generator.js" defer></script>
+<script src="lattice.js" defer></script>
+<script src="lattice-app.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -28,8 +30,12 @@
     </div>
   </header>
 
-  <nav class="modes" aria-label="Game mode">
-    <button class="mode" data-mode="daily" aria-pressed="true">Daily</button>
+  <nav class="games" aria-label="Game">
+    <button class="game" data-game="algebra" aria-pressed="true">Algebra</button>
+    <button class="game" data-game="lattice" aria-pressed="false">Lattice</button>
+  </nav>
+  <nav class="modes" aria-label="Mode">
+    <button class="mode" data-mode="daily" aria-pressed="true">Today</button>
     <button class="mode" data-mode="archive" aria-pressed="false">Archive</button>
     <button class="mode" data-mode="practice" aria-pressed="false">Practice</button>
   </nav>
@@ -37,7 +43,7 @@
     <button class="level" data-level="easy">Easy</button>
     <button class="level" data-level="medium">Medium</button>
     <button class="level" data-level="hard">Hard</button>
-    <button class="level" data-level="expert">Expert</button>
+    <button class="level" data-level="expert" id="lastLevel">Expert</button>
   </div>
 
   <section class="archive" id="archive" hidden aria-label="Past puzzles">
@@ -46,6 +52,54 @@
       <p id="archEmptyText"></p>
       <button class="check" id="btnToday">Play today's puzzle</button>
     </div>
+  </section>
+
+  <section class="lat-view" id="lattice" hidden aria-label="Lattice puzzle">
+    <div style="text-align:center"><button class="back" id="latBack" hidden>Back to archive</button></div>
+    <p class="meta"><span id="latLabel"></span><span class="pips" id="latPips" aria-hidden="true"><span></span><span></span><span></span><span></span></span><span id="latDate"></span></p>
+    <p class="prompt">Fill in every <span class="q">?</span></p>
+    <p class="lat-eq" id="latEq"></p>
+    <div class="lat-scroll"><div id="latGrid"></div></div>
+    <div class="keypad" id="latPad" role="group" aria-label="Number keys">
+      <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button data-key="4">4</button><button data-key="5">5</button>
+      <button data-key="6">6</button><button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button data-key="0">0</button>
+      <button data-key="del" class="del" aria-label="Delete">⌫</button>
+    </div>
+    <p class="msg" id="latMsg" aria-live="polite"></p>
+    <div class="lat-actions" id="latActions">
+      <button class="check" id="latCheck">Check</button>
+      <button class="ghost" id="latHint">Hint</button>
+    </div>
+    <ol class="lat-hints" id="latHints" hidden aria-label="Hints"></ol>
+    <div class="status">
+      <span>Checks <b id="latChecks">0</b></span>
+      <span>Hints <b id="latHintsUsed">0</b> of <span id="latHintsMax">3</span></span>
+      <span>Time <b id="latTime">0:00</b></span>
+    </div>
+    <div class="lat-links">
+      <button class="reveal-btn" id="latHow">How it works</button>
+      <button class="reveal-btn" id="latReveal">Reveal the solution</button>
+    </div>
+
+    <section class="result" id="latResult" hidden>
+      <p class="verdict" id="latVerdict"></p>
+      <p class="summary" id="latSummary"></p>
+      <div class="work lat-work">
+        <h2>How to solve it</h2>
+        <ol class="lat-steps" id="latSteps"></ol>
+        <h2>Adding the diagonals</h2>
+        <p class="lat-note">Start at the bottom right and add along each diagonal band. Write the units digit and carry the tens into the next diagonal.</p>
+        <ul class="lat-diag" id="latDiag"></ul>
+        <p class="lat-note" id="latReadOff"></p>
+      </div>
+      <div class="actions">
+        <button class="check" id="latShare">Share result</button>
+        <button class="ghost" id="latNew" hidden>New puzzle</button>
+        <button class="ghost" id="latMore" hidden>Practise more</button>
+        <button class="ghost" id="latArchiveBack" hidden>Back to archive</button>
+      </div>
+      <p class="next" id="latNext"></p>
+    </section>
   </section>
 
   <div style="text-align:center"><button class="back" id="btnBack" hidden>Back to archive</button></div>
@@ -95,10 +149,17 @@
 
 <dialog id="dlgStats" aria-labelledby="statsTitle">
   <div class="dlg-head"><h2 id="statsTitle">Statistics</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <h3 class="stats-h">Algebra</h3>
   <div class="figs" id="figs"></div>
   <div class="dist">
     <h3>Solved by difficulty</h3>
     <div id="dist"></div>
+  </div>
+  <h3 class="stats-h">Lattice</h3>
+  <div class="figs" id="latStats"></div>
+  <div class="dist">
+    <h3>Solved by difficulty</h3>
+    <div id="latDist"></div>
   </div>
 </dialog>
 
@@ -158,6 +219,41 @@
   </div>
 </dialog>
 
+<dialog id="dlgLattice" class="book-dlg" aria-labelledby="latHelpTitle">
+  <div class="dlg-head"><h2 id="latHelpTitle">How to play Lattice</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="book">
+    <p>Lattice multiplication (sometimes called Chinese multiplication) lays a long multiplication out as a grid. Each puzzle is a multiplication with some digits hidden. Fill in every <span class="q">?</span>.</p>
+    <h3>The grid</h3>
+    <p>One number runs along the top and the other down the right side. Each cell holds its column digit times its row digit, split by the diagonal: tens in the top left, units in the bottom right. Here's 47 × 36:</p>
+    <div class="lat-example" id="latExample"></div>
+    <p>The top-left cell is 4 × 3 = 12, so it shows 1 and 2. The bottom-right cell is 7 × 6 = 42.</p>
+    <h3>Adding the diagonals</h3>
+    <p>Start at the bottom right and add the digits in each diagonal band. Write the units digit in the box where the band ends, and carry any tens into the next band. The small number in a box's corner is the carry.</p>
+    <p>For 47 × 36: the corner is 2. The next band is 4 + 4 + 1 = 9. Then 2 + 2 + 2 = 6, then 1. Reading down the left and along the bottom gives 1692.</p>
+    <h3>Solving a puzzle</h3>
+    <p>Everything is connected, so work from what you can see. A few things that help:</p>
+    <p>Look at units digits. Anything times 5 ends in 0 or 5, and an even digit times anything gives an even result. If you know a cell and one of its two digits, the other is usually pinned down.</p>
+    <p>A cell's tens digit tells you roughly how big the product is: 2 × ? in the 10s means ? is 5 or more.</p>
+    <p>Product digits work backwards too. If a diagonal must end in 8 and you know all but one of its digits, you can work out the last one.</p>
+    <p>When two options both fit the grid, try each one. Only one will make every other digit, including the product, work.</p>
+    <h3>The rules</h3>
+    <p>Neither number starts with 0, and the product never starts with 0. Every puzzle has exactly one solution.</p>
+    <h3>Difficulty</h3>
+    <table>
+      <thead><tr><th>Level</th><th>Puzzle</th><th>Hints</th></tr></thead>
+      <tbody>
+        <tr><td>Easy</td><td>3-digit × 2-digit, a few digits hidden</td><td>3</td></tr>
+        <tr><td>Medium</td><td>4-digit × 3-digit, under half hidden</td><td>4</td></tr>
+        <tr><td>Hard</td><td>4-digit × 3-digit, most hidden. May need you to try options once</td><td>5</td></tr>
+        <tr><td>Extreme</td><td>4-digit × 3-digit, nearly everything hidden. May need it twice</td><td>6</td></tr>
+      </tbody>
+    </table>
+    <p>The daily lattice gets harder through the week: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, extreme at the weekend. Missed one? Play it from the archive. Practice gives unlimited puzzles at any level. Archive and practice puzzles don't affect your streak or statistics.</p>
+    <p>Tap a <span class="q">?</span> and use the number keys. Tap a cell to highlight its row and column digits, or a product box to highlight its diagonal. The small corner of each product box is for your own carry notes and isn't checked.</p>
+    <p><b>Check</b> marks wrong digits in red, as often as you like. Each hint fills in the next digit you could work out and explains why. Revealing the solution counts as not solved.</p>
+  </div>
+</dialog>
+
 <dialog id="dlgHelp" aria-labelledby="helpTitle">
   <div class="dlg-head"><h2 id="helpTitle">How to play</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="help">
@@ -168,6 +264,7 @@
     <p>When you finish, you'll see the worked solution. Solve on consecutive days to build a streak.</p>
     <p>A new puzzle goes live at midnight in your time zone. Missed one? Play it from the archive. Archive puzzles don't affect your streak or statistics.</p>
     <p>Practice gives you unlimited puzzles at any level. They don't count towards your statistics either.</p>
+    <p>Lattice is a second game: a multiplication grid with missing digits. Switch to it at the top. Its guide (the book or ? icon while you're in Lattice) explains how it works.</p>
   </div>
 </dialog>
 

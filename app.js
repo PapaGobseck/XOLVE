@@ -59,8 +59,10 @@ async function syncClock() {
 const fmtDay = (info, opts) => new Date(info.epochDay * 864e5).toLocaleDateString('en-GB', Object.assign({ timeZone: 'UTC' }, opts));
 
 /* ---------- game state ---------- */
-let mode = 'daily';
+let mode = 'daily';          // daily | archive | practice
+let curGame = 'algebra';     // algebra | lattice
 let practiceLevel = store.get('xolve:practiceLevel') || 'medium';
+let latticeLevel = store.get('xolve:latticeLevel') || 'medium';
 let today, game, lastTick = 0, saveCounter = 0, justFinished = false, revealArmed = false;
 
 function loadDay(info, kind) {
@@ -93,6 +95,7 @@ function saveGame() {
 
 /* ---------- views ---------- */
 function showView(v) {
+  $('lattice').hidden = v !== 'lattice';
   $('archive').hidden = v !== 'archive';
   $('sheet').hidden = v !== 'sheet';
   $('btnBack').hidden = !(v === 'sheet' && game && game.kind === 'archive');
@@ -113,15 +116,17 @@ function renderArchive() {
   $('archEmpty').hidden = hasPast;
   $('archList').hidden = !hasPast;
   if (!hasPast) {
-    $('archEmptyText').textContent = `Past puzzles appear here once their day has passed. Today's is puzzle #${today.number}.`;
+    $('archEmptyText').textContent = `Past puzzles appear here once their day has passed. Today's is #${today.number}.`;
     return;
   }
+  const lat = curGame === 'lattice';
   $('archList').innerHTML = days.map((d) => {
-    const [cls, label] = archiveStatus(d);
-    const lvl = DIFFICULTIES.indexOf(d.difficulty);
+    const [cls, label] = lat ? XolveLatticeUI.archiveStatus(d) : archiveStatus(d);
+    const lvl = lat ? XolveLatticeUI.levelIndex(d.epochDay) : DIFFICULTIES.indexOf(d.difficulty);
+    const lvlName = lat ? XolveLatticeUI.levelName(d.epochDay) : LEVEL_NAMES[d.difficulty];
     const pips = [0, 1, 2, 3].map((i) => `<span${i <= lvl ? ' class="on"' : ''}></span>`).join('');
     const when = d.epochDay === today.epochDay ? 'Today' : fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' });
-    return `<li><button class="arch-row" data-epoch="${d.epochDay}" aria-label="Puzzle ${d.number}, ${when}, ${LEVEL_NAMES[d.difficulty]}, ${label}"><span class="an">#${d.number}</span><span>${when}</span><span class="pips" aria-hidden="true">${pips}</span><span class="as ${cls}">${label}</span></button></li>`;
+    return `<li><button class="arch-row" data-epoch="${d.epochDay}" aria-label="${lat ? 'Lattice' : 'Puzzle'} ${d.number}, ${when}, ${lvlName}, ${label}"><span class="an">#${d.number}</span><span>${when}</span><span class="pips" aria-hidden="true">${pips}</span><span class="as ${cls}">${label}</span></button></li>`;
   }).join('');
 }
 
@@ -309,7 +314,7 @@ function recordStats(won) {
 /* ---------- timer (only runs while the page is visible) ---------- */
 function tick() {
   const now = performance.now();
-  if (game && game.status === 'playing' && !document.hidden) {
+  if (game && game.status === 'playing' && !document.hidden && !$('sheet').hidden) {
     game.elapsed += now - lastTick;
     $('timeStat').textContent = fmtTime(game.elapsed);
     if (++saveCounter % 20 === 0) saveGame();
@@ -322,8 +327,9 @@ function tick() {
 /* Midnight in the player's time zone: switch to the new puzzle wherever they are. */
 function newDay(current) {
   today = current;
-  if (mode === 'daily') { saveGame(); startDaily(); toast(`Puzzle #${today.number} is live`); }
-  else if (mode === 'archive' && $('sheet').hidden) renderArchive();
+  if (curGame === 'algebra' && mode === 'daily') { saveGame(); startDaily(); toast(`Puzzle #${today.number} is live`); }
+  else if (mode === 'archive' && !$('archive').hidden) renderArchive();
+  XolveLatticeUI.newDay();
 }
 document.addEventListener('visibilitychange', () => { lastTick = performance.now(); if (document.hidden) saveGame(); });
 window.addEventListener('pagehide', saveGame);
@@ -345,8 +351,8 @@ function shareText() {
     `${squares} ${won ? `${game.attempts.length}/6 in ${fmtTime(game.elapsed)}` : 'X/6'}`,
     streak && game.kind === 'daily' ? `🔥 ${streak}` : ''].filter(Boolean).join('\n');
 }
-async function share() {
-  const text = shareText();
+function share() { copyText(shareText()); }
+async function copyText(text) {
   try { await navigator.clipboard.writeText(text); toast('Result copied'); return; } catch (e) {}
   const ta = document.createElement('textarea');
   ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -356,8 +362,9 @@ async function share() {
   if (ok) { toast('Result copied'); return; }
   const box = document.createElement('textarea');
   box.className = 'copybox'; box.value = text; box.setAttribute('readonly', '');
-  const old = document.querySelector('.result .copybox'); if (old) old.remove();
-  $('result').appendChild(box); box.select();
+  document.querySelectorAll('.copybox').forEach((b) => b.remove());
+  const host = curGame === 'lattice' ? $('latResult') : $('result');
+  host.appendChild(box); box.select();
   toast('Copy the result below');
 }
 let toastTimer;
@@ -379,6 +386,7 @@ function openStats() {
     const b = st.byDiff[d];
     return `<div class="bar-row"><span>${LEVEL_NAMES[d]}</span><span class="bar" role="img" aria-label="${b.won} of ${b.played} solved"><i style="width:${(b.won / maxPlayed) * 100}%"></i></span><span class="v">${b.won}/${b.played}</span></div>`;
   }).join('');
+  XolveLatticeUI.renderStats($('latStats'), $('latDist'));
   $('dlgStats').showModal();
 }
 
@@ -391,40 +399,60 @@ $('btnReveal').addEventListener('click', () => {
 });
 $('btnShare').addEventListener('click', share);
 $('btnNew').addEventListener('click', startPractice);
-$('btnPractice').addEventListener('click', () => setMode('practice'));
+$('btnPractice').addEventListener('click', () => go('algebra', 'practice'));
 $('btnBack').addEventListener('click', () => { saveGame(); renderArchive(); });
 $('btnArchiveBack').addEventListener('click', () => { saveGame(); renderArchive(); });
-$('btnToday').addEventListener('click', () => setMode('daily'));
+$('btnToday').addEventListener('click', () => go(curGame, 'daily'));
 $('archList').addEventListener('click', (e) => {
   const b = e.target.closest('.arch-row'); if (!b) return;
   const ep = +b.dataset.epoch;
-  if (ep === today.epochDay) setMode('daily'); else startArchivePuzzle(ep);
+  if (ep === today.epochDay) go(curGame, 'daily');
+  else if (curGame === 'lattice') { showView('lattice'); XolveLatticeUI.open('archive', ep); }
+  else startArchivePuzzle(ep);
 });
 $('btnStats').addEventListener('click', openStats);
-$('btnHelp').addEventListener('click', () => $('dlgHelp').showModal());
-$('btnBook').addEventListener('click', () => $('dlgBook').showModal());
+$('btnHelp').addEventListener('click', () => (curGame === 'lattice' ? XolveLatticeUI.openHelp() : $('dlgHelp').showModal()));
+$('btnBook').addEventListener('click', () => (curGame === 'lattice' ? XolveLatticeUI.openHelp() : $('dlgBook').showModal()));
 $('btnHint').addEventListener('click', useHint);
 $('btnHome').addEventListener('click', () => {
   document.querySelectorAll('dialog[open]').forEach((d) => d.close());
-  setMode('daily');
+  go('algebra', 'daily');
   window.scrollTo({ top: 0 });
 });
 document.querySelectorAll('dialog').forEach((d) => {
   d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
 });
-function setMode(m) {
+/* ---------- navigation: pick a game, then Today / Archive / Practice ---------- */
+const LEVELS_FOR = { algebra: ['easy', 'medium', 'hard', 'expert'], lattice: ['easy', 'medium', 'hard', 'extreme'] };
+function go(g, m) {
   saveGame();
-  mode = m;
+  if (curGame === 'lattice') XolveLatticeUI.close();
+  curGame = g; mode = m;
+  document.querySelectorAll('.game').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.game === g)));
   document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   $('levels').hidden = m !== 'practice';
-  if (m === 'daily') startDaily();
-  else if (m === 'archive') { today = dayInfo(nowDate()); renderArchive(); }
+  markLevel();
+  today = dayInfo(nowDate());
+  if (m === 'archive') renderArchive();
+  else if (g === 'lattice') { showView('lattice'); XolveLatticeUI.open(m, m === 'practice' ? latticeLevel : undefined); }
+  else if (m === 'daily') startDaily();
   else startPractice();
 }
-document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => { if (b.dataset.mode !== mode) setMode(b.dataset.mode); }));
-function markLevel() { document.querySelectorAll('.level').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === practiceLevel))); }
+document.querySelectorAll('.game').forEach((b) => b.addEventListener('click', () => { if (b.dataset.game !== curGame) go(b.dataset.game, mode); }));
+document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => go(curGame, b.dataset.mode)));
+function markLevel() {
+  const list = LEVELS_FOR[curGame], current = curGame === 'lattice' ? latticeLevel : practiceLevel;
+  $('lastLevel').dataset.level = list[3];
+  $('lastLevel').textContent = curGame === 'lattice' ? 'Extreme' : 'Expert';
+  document.querySelectorAll('.level').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === current)));
+}
 document.querySelectorAll('.level').forEach((b) => b.addEventListener('click', () => {
-  practiceLevel = b.dataset.level; store.set('xolve:practiceLevel', practiceLevel); markLevel(); startPractice();
+  if (curGame === 'lattice') {
+    latticeLevel = b.dataset.level; store.set('xolve:latticeLevel', latticeLevel); markLevel();
+    XolveLatticeUI.open('practice', latticeLevel);
+  } else {
+    practiceLevel = b.dataset.level; store.set('xolve:practiceLevel', practiceLevel); markLevel(); startPractice();
+  }
 }));
 window.addEventListener('resize', () => game && fitEquation());
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => game && fitEquation());
@@ -433,6 +461,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => game
 markLevel();
 $('sheet').hidden = true;
 syncClock().then(() => {
+  XolveLatticeUI.init({ store, nowDate, dayInfo, infoFromEpoch, toast, fmtTime, share: copyText, go });
   startDaily();
   lastTick = performance.now();
   setInterval(tick, 250);

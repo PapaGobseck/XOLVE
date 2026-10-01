@@ -2,7 +2,10 @@
 
 **One equation. Every day. Actually solve it.**
 
-XOLVE is a Wordle-style daily algebra puzzle. Everyone gets the same equation each day, and the job is to solve it for *x*. You get 6 attempts, a timer, a streak, and the worked solution once you finish.
+XOLVE is a Wordle-style daily maths puzzle with two games:
+
+- **Algebra:** everyone gets the same equation each day, and the job is to solve it for *x*. You get 6 attempts, a timer, a streak, and the worked solution once you finish.
+- **Lattice:** a multiplication laid out as a lattice (Chinese multiplication) grid, with digits hidden. Fill in every missing digit, with unlimited checks and hints that explain each step.
 
 ## Features
 
@@ -12,6 +15,8 @@ XOLVE is a Wordle-style daily algebra puzzle. Everyone gets the same equation ea
 - Streaks and statistics, saved in the player's browser
 - Archive of past puzzles (these don't affect the streak or statistics)
 - Practice mode with unlimited puzzles at any level
+- Hints that reveal the working one step at a time, and a formula book of algebra rules
+- Lattice: its own daily puzzle, archive, practice, streak and statistics, four difficulty levels, hints that explain each deduction, a How to play guide and a full worked solution
 - Shareable result, light and dark themes, works on mobile and desktop
 
 ## Files
@@ -21,8 +26,11 @@ XOLVE is a Wordle-style daily algebra puzzle. Everyone gets the same equation ea
 | `index.html` | Page structure: header, tabs, equation area, archive list, dialogs |
 | `style.css` | All styling, including dark mode and mobile layout |
 | `generator.js` | The puzzle engine: templates, seeding and daily puzzle selection |
-| `app.js` | The game: answer checking, timer, statistics, archive, sharing |
-| `tests/generator.test.js` | Checks that generated puzzles and their worked solutions are correct |
+| `app.js` | The algebra game: answer checking, timer, statistics, archive, sharing |
+| `lattice.js` | The Lattice engine: generator, uniqueness solver, hint and solution steps |
+| `lattice-app.js` | The Lattice screen: grid, keypad, checking, hints, statistics |
+| `tests/generator.test.js` | Checks that algebra puzzles and their worked solutions are correct |
+| `tests/lattice.test.js` | Checks that every Lattice puzzle has exactly one solution and correct steps |
 
 There's no build step and no dependencies.
 
@@ -57,10 +65,26 @@ Each equation is built **backwards**. The generator picks the answer first, then
 - **Adding templates:** add a function to the right level in `TEMPLATES`, following the existing pattern, then run the tests.
 - **After launch, any change to the generator also changes past puzzles in the archive**, because they're regenerated from the date each time. Make template changes before you share the game.
 
+## How Lattice puzzles are made
+
+| Level | Grid | Digits hidden | Hints | "Try the options" steps allowed |
+| --- | --- | --- | --- | --- |
+| Easy | 3-digit × 2-digit | 9 of 22 | 3 | 0 |
+| Medium | 4-digit × 3-digit | 18 of 38 | 4 | 0 |
+| Hard | 4-digit × 3-digit | 24 of 38 | 5 | 1 |
+| Extreme | 4-digit × 3-digit | 29 of 38 | 6 | 2 |
+
+The daily lattice follows the week like the algebra puzzle: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, extreme at the weekend. These settings live in `LEVELS` at the top of `lattice.js`.
+
+The generator picks two numbers (digits 1–9, with no leading zero in the product) and fills the whole lattice. It then hides digits one at a time, trying digits of the two numbers first, then cells and product digits. After each removal a solver checks the puzzle still has exactly one solution. It stops when it reaches the level's number of hidden digits.
+
+The same deduction engine powers the hints and the worked solution. It looks for, in order: a digit of either number pinned down by nearby cells, a cell whose row and column digits are known, a cell worked back from a product digit, and a product digit from a finished diagonal. If none of those apply, it tries each option for a digit and keeps the only one that fits. Puzzles needing more of those steps than the level allows are thrown away.
+
 ## Tests
 
 ```
 node tests/generator.test.js
+node tests/lattice.test.js
 ```
 
 This generates thousands of puzzles from every template, plus five years of daily puzzles. It checks every line of every worked solution, makes sure each equation has one whole-number answer, and confirms no template repeats on back-to-back days.
