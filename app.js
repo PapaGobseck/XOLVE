@@ -349,7 +349,7 @@ function shareText() {
   const streak = liveStreak(loadStats(), today.epochDay);
   return [`XOLVE #${p.id} (${LEVEL_NAMES[p.difficulty]}${game.kind === 'archive' ? ', archive' : ''})`,
     `${squares} ${won ? `${game.attempts.length}/6 in ${fmtTime(game.elapsed)}` : 'X/6'}`,
-    streak && game.kind === 'daily' ? `🔥 ${streak}` : ''].filter(Boolean).join('\n');
+    streak && game.kind === 'daily' ? `🔥 ${streak}` : '', 'https://xolve.games'].filter(Boolean).join('\n');
 }
 function share() { copyText(shareText()); }
 async function copyText(text) {
