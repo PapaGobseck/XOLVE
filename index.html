@@ -116,6 +116,7 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
       </div>
       <div class="actions">
         <button class="check" id="cdShare">Share result</button>
+        <button class="ghost" id="cdNew" hidden>New puzzle</button>
         <button class="ghost" id="cdArchive" hidden>Past countdowns</button>
         <button class="ghost" id="cdArchiveBack" hidden>Back to archive</button>
       </div>
@@ -311,8 +312,9 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
     <p>Work one step at a time. Tap a number, a symbol, then another number. The two numbers are used up and the answer takes their place, ready to use in the next step. For example, 100 × 5 makes 500, then 3 + 1 makes 4, then 50 × 4 makes 200, then 500 + 200 makes 700.</p>
     <p>Every number you make counts straight away, so there's nothing to submit. Undo takes back your last step and Reset gives you all six numbers again. Numbers you've already made still count after an undo.</p>
     <p>A step that breaks a rule, like 3 − 5 or 7 ÷ 2, isn't allowed, and you'll see why. On a keyboard, you can type a number, then + - * or /, then another number. Backspace undoes a step and Esc clears what you've picked.</p>
-    <h3>Past countdowns</h3>
+    <h3>Past countdowns and practice</h3>
     <p>Puzzles in the archive aren't timed, and they don't affect your streak or statistics. If you're stuck, Show a solution ends the round.</p>
+    <p>Practice gives you unlimited random puzzles with no timer, so you can take your time and get used to working in steps. Practice puzzles don't affect your streak or statistics.</p>
     <h3>Statistics</h3>
     <p>Your streak counts days in a row where you hit the target exactly. The statistics also show how close you got each day: exact, 1–5 away, 6–10 away, 11 or more away, or no answer.</p>
   </div>

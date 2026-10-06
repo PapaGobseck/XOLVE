@@ -1,7 +1,8 @@
 /*
  * XOLVE Countdown: reach the target with six numbers.
  * Daily: the numbers stay covered until Start, then a 60-second clock runs.
- * Archive: untimed, numbers shown straight away. No practice mode.
+ * Archive: untimed, numbers shown straight away.
+ * Practice: unlimited random puzzles, untimed. Not saved, no stats.
  * Needs countdown/engine.js and shared/shell.js. The shell starts it with init() and
  * shows or hides it with open() / close().
  */
@@ -17,7 +18,7 @@
   let isOpen = false, justFinished = false, revealArmed = false;
   const cache = {};
 
-  /* state: { kind: 'daily' | 'archive', info, key, puzzle,
+  /* state: { kind: 'daily' | 'archive' | 'practice', info, key, puzzle,
               status: 'ready' (daily, not started) | 'playing' | 'done',
               startedAt: ms (daily clock), steps: [{ a, op, b }], attempts: [{ value }],
               best: { value, steps: [{ x, op, y, r }] } | null,
@@ -91,8 +92,16 @@
     if (timed() && state.status === 'playing' && remaining() <= 0) timeUp(true);
     render();
   }
+  /* A practice puzzle: a random draw, untimed. Never saved. */
+  function loadPractice() {
+    const puzzle = C.buildPuzzle((Math.random() * 4294967296) >>> 0, { id: 'practice', date: null });
+    state = { kind: 'practice', puzzle, steps: [], attempts: [], best: null, status: 'playing' };
+    justFinished = false; revealArmed = false; pick = null; typed = '';
+    $('cdMsg').textContent = '';
+    render();
+  }
   function save() {
-    if (!state) return;
+    if (!state || state.kind === 'practice') return;
     const { status, startedAt, steps, attempts, best, outcome, timeMs } = state;
     deps.store.set(state.key, { status, startedAt, steps, attempts, best, outcome, timeMs });
   }
@@ -101,8 +110,9 @@
   function render() {
     if (!state) return;
     const p = P(), st = state.status, kind = state.kind;
-    $('cdLabel').textContent = `Countdown #${state.info.number}`;
-    $('cdDate').textContent = deps.fmtDay(state.info, kind === 'daily' ? { weekday: 'long' } : { weekday: 'short', day: 'numeric', month: 'short' }) + (kind === 'archive' ? ', untimed' : '');
+    $('cdLabel').textContent = kind === 'practice' ? 'Practice' : `Countdown #${state.info.number}`;
+    $('cdDate').textContent = kind === 'practice' ? 'Untimed'
+      : deps.fmtDay(state.info, kind === 'daily' ? { weekday: 'long' } : { weekday: 'short', day: 'numeric', month: 'short' }) + (kind === 'archive' ? ', untimed' : '');
     $('cdBack').hidden = kind !== 'archive';
     $('cdTarget').textContent = p.target;
     $('cdStart').hidden = st !== 'ready';
@@ -175,6 +185,7 @@
     $('cdShare').hidden = state.kind !== 'daily';
     $('cdArchive').hidden = state.kind !== 'daily';
     $('cdArchiveBack').hidden = state.kind !== 'archive';
+    $('cdNew').hidden = state.kind !== 'practice';
     updateCountdown();
     $('cdResult').classList.toggle('animate', justFinished);
     justFinished = false;
@@ -367,15 +378,17 @@
     });
     $('cdShare').addEventListener('click', () => deps.share(shareText()));
     $('cdArchive').addEventListener('click', () => deps.go('countdown', 'archive'));
+    $('cdNew').addEventListener('click', () => { loadPractice(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
     $('cdArchiveBack').addEventListener('click', () => deps.go('countdown', 'archive'));
     $('cdBack').addEventListener('click', () => deps.go('countdown', 'archive'));
     $('cdHow').addEventListener('click', openHelp);
     window.addEventListener('pagehide', save);
     setInterval(tick, 200);
   }
-  /* open('daily') or open('archive', epochDay) */
+  /* open('daily'), open('archive', epochDay) or open('practice') */
   function open(kind, arg) {
     isOpen = true;
+    if (kind === 'practice') return loadPractice();
     const today = deps.dayInfo(deps.nowDate());
     if (kind === 'archive' && arg < today.epochDay) load(deps.infoFromEpoch(arg), 'archive');
     else load(today, 'daily');
@@ -387,8 +400,8 @@
   }
 
   XolveShell.register('countdown', {
-    name: 'Countdown', view: 'countdown', archiveLabel: 'Countdown', levelKey: 'xolve:countdownLevel',
-    levels: [], practice: false,
+    name: 'Countdown', view: 'countdown', archiveLabel: 'Countdown', levelKey: 'xolve:countdownPractice',
+    levels: [],
     init, open, close, newDay, archiveStatus, renderStats, openHelp, openBook: openHelp,
     levelIndex: () => null, levelName: () => '',
     resultHost: () => $('cdResult'),

@@ -71,7 +71,11 @@ const XolveShell = (() => {
   function register(id, game) { games[id] = game; order.push(id); }
 
   let curGame = null, mode = 'daily', today = null;
-  const levelFor = (g) => store.get(games[g].levelKey) || 'medium';
+  /* The saved practice level, or medium (or the game's first level if it has no medium). */
+  function levelFor(g) {
+    const ids = (games[g].levels || []).map((l) => l.id), saved = store.get(games[g].levelKey);
+    return ids.includes(saved) ? saved : ids.includes('medium') ? 'medium' : ids[0];
+  }
 
   /* Show one screen: the archive or a game's view. */
   function showView(id) {
