@@ -38,6 +38,28 @@ header{display:flex;align-items:center;justify-content:space-between;height:68px
 .icon-btn:hover{background:var(--pen-wash)}
 .icon-btn svg{width:22px;height:22px}
 
+/* Dark mode switch: on = dark. The knob carries a small moon. */
+.theme-switch{width:44px;height:44px;display:grid;place-items:center;background:none;border:0;border-radius:10px;cursor:pointer;padding:0}
+.theme-switch::before{content:"";grid-area:1/1;width:38px;height:22px;border-radius:11px;background:var(--line);transition:background .2s}
+.theme-switch .knob{grid-area:1/1;width:18px;height:18px;border-radius:50%;background:var(--surface);display:grid;place-items:center;
+  transform:translateX(-8px);transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.theme-switch .knob svg{width:12px;height:12px;fill:var(--muted)}
+.theme-switch[aria-checked="true"]::before{background:var(--pen)}
+.theme-switch[aria-checked="true"] .knob{transform:translateX(8px)}
+.theme-switch[aria-checked="true"] .knob svg{fill:var(--pen)}
+.theme-switch:hover::before{filter:brightness(.95)}
+@media (prefers-reduced-motion: reduce){.theme-switch::before,.theme-switch .knob{transition:none}}
+@media (max-width:360px){.tools{gap:0}.icon-btn,.theme-switch{width:40px}}
+
+/* "New here?" note, shown instead of opening How to play automatically */
+.intro{display:flex;align-items:center;justify-content:center;gap:6px;margin:4px auto 10px;padding:4px 4px 4px 14px;width:fit-content;
+  max-width:100%;background:var(--surface);border:1px solid var(--line);border-radius:999px;font-size:.92rem;color:var(--muted)}
+.intro[hidden]{display:none}
+.intro-link{background:none;border:0;padding:4px 2px;color:var(--pen);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.intro-close{width:30px;height:30px;display:grid;place-items:center;background:none;border:0;border-radius:50%;cursor:pointer;color:var(--muted)}
+.intro-close:hover{background:var(--pen-wash)}
+.intro-close svg{width:16px;height:16px}
+
 .games{display:flex;gap:6px;justify-content:center;margin:4px 0 0}
 .game{border:1px solid var(--line);background:var(--surface);padding:7px 22px;border-radius:999px;cursor:pointer;font-size:.95rem;color:var(--muted);font-weight:500}
 .game[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}

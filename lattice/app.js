@@ -33,7 +33,6 @@
     selected = null; justFinished = false; revealArmed = false;
     $('latMsg').textContent = '';
     render();
-    if (!deps.store.get('xolve:seenLatticeHelp')) { deps.store.set('xolve:seenLatticeHelp', true); openHelp(); }
   }
   function loadDay(info, kind) {
     start(Object.assign(blank(), deps.store.get(keyFor(info)) || {}, { kind, info, key: keyFor(info), puzzle: dailyPuzzle(info) }));

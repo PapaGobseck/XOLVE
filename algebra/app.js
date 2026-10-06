@@ -342,7 +342,6 @@ function open(kind, arg) {
   if (kind === 'daily') startDaily();
   else if (kind === 'archive') startArchivePuzzle(arg);
   else startPractice(arg || 'medium');
-  if (!store.get('xolve:seenHelp')) { store.set('xolve:seenHelp', true); $('dlgHelp').showModal(); }
 }
 function close() { saveGame(); isOpen = false; revealArmed = false; $('btnBack').hidden = true; }
 
