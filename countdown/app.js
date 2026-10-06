@@ -19,32 +19,82 @@
 
   /* state: { kind: 'daily' | 'archive', info, key, puzzle,
               status: 'ready' (daily, not started) | 'playing' | 'done',
-              startedAt: ms (daily clock), attempts: [{ expr, value }], best: { expr, value } | null,
-              outcome: 'exact' | 'closest' | 'timeout' | 'revealed', timeMs } */
+              startedAt: ms (daily clock), steps: [{ a, op, b }], attempts: [{ value }],
+              best: { value, steps: [{ x, op, y, r }] } | null,
+              outcome: 'exact' | 'closest' | 'timeout' | 'revealed', timeMs }
+     Tiles have ids: 0–5 are the six numbers, and step k makes tile 6 + k.
+     A step's a and b are tile ids; its answer takes b's place in the row. */
   const keyFor = (info) => 'xolve:cd:' + info.iso;
   const dailyPuzzle = (info) => cache[info.iso] || (cache[info.iso] = C.dailyPuzzle(info));
   const P = () => state.puzzle;
   const off = (v) => Math.abs(v - P().target);
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const timed = () => state.kind === 'daily';
   const remaining = () => Math.max(0, LIMIT - (Date.now() - state.startedAt));
+  const SYM = { '+': '+', '-': C.MINUS, '*': C.TIMES, '/': C.DIVIDE };
+  let pick = null;          // { a: tile id, op } while building a step
+  let typed = '', typedTimer = null;
+
+  /* The value of each tile, and which tile sits in each of the six places. */
+  function board() {
+    const vals = P().numbers.slice(), slots = [0, 1, 2, 3, 4, 5];
+    state.steps.forEach((s) => {
+      const id = vals.length;
+      vals.push(apply(vals[s.a], s.op, vals[s.b]).value);
+      slots[slots.indexOf(s.a)] = null;
+      slots[slots.indexOf(s.b)] = id;
+    });
+    return { vals, slots };
+  }
+  /* One step, checked against the rules. */
+  function apply(x, op, y) {
+    if (op === '+') return { value: x + y };
+    if (op === '*') return { value: x * y };
+    if (op === '-') return y > x ? { reason: `${x} ${C.MINUS} ${y} goes below zero. Try ${y} ${C.MINUS} ${x}.` } : { value: x - y };
+    if (y === 0) return { reason: "You can't divide by zero" };
+    return x % y ? { reason: `${x} ${C.DIVIDE} ${y} isn't a whole number` } : { value: x / y };
+  }
+  /* Just the steps that lead to a tile, in order, for showing how a number was made. */
+  function stepsFor(id, vals) {
+    const out = [];
+    const walk = (t) => {
+      if (t < 6) return;
+      const s = state.steps[t - 6];
+      walk(s.a); walk(s.b);
+      out.push({ x: vals[s.a], op: s.op, y: vals[s.b], r: vals[t] });
+    };
+    walk(id);
+    return out;
+  }
+  /* The example solution is stored as one line; turn it into steps the same way. */
+  function solutionSteps(expr) {
+    const toks = expr.match(/\d+|[+\u2212\u00d7\u00f7()]/g), out = [];
+    let i = 0;
+    const OP = { '+': '+', '\u2212': '-', '\u00d7': '*', '\u00f7': '/' };
+    const step = (x, o, y) => { const r = apply(x, OP[o], y).value; out.push({ x, op: OP[o], y, r }); return r; };
+    const factor = () => { const t = toks[i++]; if (t === '(') { const v = expr_(); i++; return v; } return +t; };
+    const term = () => { let v = factor(); while (toks[i] === '\u00d7' || toks[i] === '\u00f7') { const o = toks[i++]; v = step(v, o, factor()); } return v; };
+    const expr_ = () => { let v = term(); while (toks[i] === '+' || toks[i] === '\u2212') { const o = toks[i++]; v = step(v, o, term()); } return v; };
+    expr_();
+    return out;
+  }
+  const stepsHTML = (steps) => steps.map((s) => `<li>${s.x} ${SYM[s.op]} ${s.y} = <b>${s.r}</b></li>`).join('');
 
   function load(info, kind) {
     const saved = deps.store.get(keyFor(info));
-    state = Object.assign({ attempts: [], best: null, status: kind === 'daily' ? 'ready' : 'playing' }, saved || {},
+    state = Object.assign({ steps: [], attempts: [], best: null, status: kind === 'daily' ? 'ready' : 'playing' }, saved || {},
       { kind, info, key: keyFor(info), puzzle: dailyPuzzle(info) });
+    if (!Array.isArray(state.steps)) state.steps = [];
     // An archive round is never timed, even if it was started as a daily one.
     if (kind === 'archive' && state.status === 'ready') state.status = 'playing';
-    justFinished = false; revealArmed = false;
-    $('cdInput').value = '';
+    justFinished = false; revealArmed = false; pick = null; typed = '';
     $('cdMsg').textContent = '';
     if (timed() && state.status === 'playing' && remaining() <= 0) timeUp(true);
     render();
   }
   function save() {
     if (!state) return;
-    const { status, startedAt, attempts, best, outcome, timeMs } = state;
-    deps.store.set(state.key, { status, startedAt, attempts, best, outcome, timeMs });
+    const { status, startedAt, steps, attempts, best, outcome, timeMs } = state;
+    deps.store.set(state.key, { status, startedAt, steps, attempts, best, outcome, timeMs });
   }
 
   /* ---------- rendering ---------- */
@@ -55,30 +105,50 @@
     $('cdDate').textContent = deps.fmtDay(state.info, kind === 'daily' ? { weekday: 'long' } : { weekday: 'short', day: 'numeric', month: 'short' }) + (kind === 'archive' ? ', untimed' : '');
     $('cdBack').hidden = kind !== 'archive';
     $('cdTarget').textContent = p.target;
-
-    const covered = st === 'ready';
-    $('cdTiles').innerHTML = p.numbers.map((n, i) => covered
-      ? `<button class="cd-tile covered" disabled aria-label="Hidden number">?</button>`
-      : `<button class="cd-tile${C.LARGE.includes(n) ? ' large' : ''}" data-i="${i}" data-v="${n}">${n}</button>`).join('');
-    $('cdStart').hidden = !covered;
-    $('cdStartNote').hidden = !covered;
-
+    $('cdStart').hidden = st !== 'ready';
+    $('cdStartNote').hidden = st !== 'ready';
     const on = st === 'playing';
     $('cdPlay').hidden = !on;
     $('cdClock').hidden = !(on && timed());
     $('cdGiveUp').hidden = !(on && !timed());
     if (!revealArmed) { $('cdGiveUp').textContent = 'Show a solution'; $('cdGiveUp').classList.remove('arm'); }
+    renderBoard();
     renderAttempts();
-    if (on) { markTiles(); preview(); renderClock(); }
+    if (on) renderClock();
     $('cdResult').hidden = st !== 'done';
     if (st === 'done') renderResult();
+  }
+  function renderBoard() {
+    const st = state.status;
+    if (st === 'ready') {
+      $('cdTiles').innerHTML = P().numbers.map(() => `<button class="cd-tile covered" disabled aria-label="Hidden number">?</button>`).join('');
+      return;
+    }
+    // Once the round is over, show the six numbers again.
+    const { vals, slots } = st === 'playing' ? board() : { vals: P().numbers, slots: [0, 1, 2, 3, 4, 5] };
+    $('cdTiles').innerHTML = slots.map((id) => {
+      if (id === null) return '<span class="cd-tile gone" aria-hidden="true"></span>';
+      const v = vals[id], cls = ['cd-tile'];
+      if (id < 6 && C.LARGE.includes(v)) cls.push('large');
+      if (id >= 6) cls.push('made');
+      if (String(v).length >= 4) cls.push(String(v).length >= 6 ? 'longer' : 'long');
+      if (pick && pick.a === id) cls.push('sel');
+      return `<button class="${cls.join(' ')}" data-id="${id}" aria-pressed="${!!(pick && pick.a === id)}"${st === 'playing' ? '' : ' disabled'}>${v}</button>`;
+    }).join('');
+    if (st !== 'playing') return;
+    $('cdSteps').innerHTML = stepsHTML(state.steps.map((s, k) => ({ x: vals[s.a], op: s.op, y: vals[s.b], r: vals[6 + k] })));
+    $('cdOps').querySelectorAll('[data-op]').forEach((b) => b.setAttribute('aria-pressed', String(!!(pick && pick.op && SYM[pick.op] === b.dataset.op))));
+    $('cdOps').querySelector('[data-act="undo"]').disabled = !state.steps.length;
+    $('cdOps').querySelector('[data-act="reset"]').disabled = !state.steps.length;
+    $('cdHint').textContent = !pick ? (state.steps.length ? 'Pick a number for your next step' : 'Pick a number to start')
+      : !pick.op ? `${vals[pick.a]} … now pick + ${C.MINUS} ${C.TIMES} or ${C.DIVIDE}`
+        : `${vals[pick.a]} ${SYM[pick.op]} … now pick another number`;
   }
   function renderAttempts() {
     const b = state.best;
     $('cdBest').hidden = !b || state.status !== 'playing';
     if (b) $('cdBest').innerHTML = `Closest so far: <b>${b.value}</b> <span>(${off(b.value)} away)</span>`;
-    const tries = state.status === 'playing' ? state.attempts : [];
-    $('cdTries').innerHTML = tries.map((a) => `<li>${a.value}</li>`).join('');
+    $('cdTries').innerHTML = state.status === 'playing' ? state.attempts.map((a) => `<li>${a.value}</li>`).join('') : '';
   }
   function renderClock() {
     if (!timed() || state.status !== 'playing') return;
@@ -87,33 +157,21 @@
     $('cdBar').style.width = (ms / LIMIT) * 100 + '%';
     $('cdClock').classList.toggle('low', s <= 10);
   }
-  /* Grey out the tiles the current calculation already uses. */
-  function markTiles() {
-    const nums = ($('cdInput').value.match(/\d+/g) || []).map(Number);
-    const tiles = [...$('cdTiles').querySelectorAll('.cd-tile')];
-    tiles.forEach((t) => t.classList.remove('used'));
-    nums.forEach((n) => { const t = tiles.find((x) => +x.dataset.v === n && !x.classList.contains('used')); if (t) t.classList.add('used'); });
-  }
-  /* Show what the calculation makes while it's valid. */
-  function preview() {
-    const raw = $('cdInput').value, r = raw.trim() ? C.check(raw, P().numbers) : null;
-    $('cdPreview').textContent = r && r.ok ? `= ${r.value}` : '';
-  }
 
   function renderResult() {
     const p = P(), b = state.best, o = state.outcome;
-    const verdict = { exact: 'Bang on', closest: b ? `${off(b.value)} away` : '', timeout: 'Out of time', revealed: 'Not this time' }[o];
-    $('cdVerdict').textContent = verdict;
+    $('cdVerdict').textContent = { exact: 'Bang on', closest: b ? `${off(b.value)} away` : '', timeout: 'Out of time', revealed: 'Not this time' }[o];
     const secs = state.timeMs !== undefined ? Math.max(1, Math.round(state.timeMs / 1000)) : null;
     $('cdSummary').textContent = o === 'exact'
       ? `You made ${p.target}${secs && timed() ? ` in ${secs} ${secs === 1 ? 'second' : 'seconds'}` : ''}.`
       : o === 'closest' ? `Your closest was ${b.value}, for a target of ${p.target}.`
-        : o === 'timeout' ? `No answer before the clock ran out. The target was ${p.target}.`
+        : o === 'timeout' ? `You didn't make a number before the clock ran out. The target was ${p.target}.`
           : `The target was ${p.target}.`;
     $('cdYours').hidden = !b;
-    $('cdYoursHead').textContent = o === 'exact' ? 'Your answer' : 'Your closest';
-    if (b) $('cdYoursCalc').innerHTML = `${esc(b.expr)} = <b>${b.value}</b>`;
-    $('cdSolution').innerHTML = `${esc(p.solution)} = <b>${p.target}</b>`;
+    $('cdYoursHead').textContent = o === 'exact' ? 'Your steps' : 'How you made your closest';
+    // Rounds saved before steps existed kept a one-line calculation instead.
+    if (b) $('cdYoursCalc').innerHTML = b.steps ? stepsHTML(b.steps) : `<li>${b.expr.replace(/</g, '&lt;')} = <b>${b.value}</b></li>`;
+    $('cdSolution').innerHTML = stepsHTML(solutionSteps(p.solution));
     $('cdShare').hidden = state.kind !== 'daily';
     $('cdArchive').hidden = state.kind !== 'daily';
     $('cdArchiveBack').hidden = state.kind !== 'archive';
@@ -129,7 +187,6 @@
     el.textContent = `Next countdown in ${deps.fmtTime(Math.max(0, midnight - n))}`;
   }
   function say(t) { $('cdMsg').textContent = t; }
-  function shake() { const i = $('cdInput'); i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake'); }
 
   /* ---------- playing ---------- */
   function start() {
@@ -138,22 +195,49 @@
     state.startedAt = Date.now();
     save();
     render();
-    if (!coarse) $('cdInput').focus({ preventScroll: true });
   }
-  function submit() {
-    if (state.status !== 'playing') return;
-    if (timed() && remaining() <= 0) return timeUp();
-    const raw = $('cdInput').value;
-    const r = C.check(raw, P().numbers);
-    if (!r.ok) { say(r.reason); shake(); return; }
-    const expr = raw.trim().replace(/\s+/g, ' ');
-    if (state.attempts.some((a) => a.value === r.value)) { say(`You've already made ${r.value}.`); return; }
-    state.attempts.push({ expr, value: r.value });
-    if (!state.best || off(r.value) < off(state.best.value)) state.best = { expr, value: r.value };
-    if (r.value === P().target) return finish('exact');
-    say(`${r.value}: ${off(r.value)} away.`);
+  function playable() {
+    if (state.status !== 'playing') return false;
+    if (timed() && remaining() <= 0) { timeUp(); return false; }
+    return true;
+  }
+  /* Tapping a number: start a step, change the first number, or finish the step. */
+  function tapTile(id) {
+    if (!playable()) return;
+    say('');
+    if (!pick || !pick.op) { pick = pick && pick.a === id ? null : { a: id }; return renderBoard(); }
+    if (pick.a === id) { pick = { a: id }; return renderBoard(); }
+    const { vals } = board(), r = apply(vals[pick.a], pick.op, vals[id]);
+    if (r.reason) { say(r.reason); return; }
+    state.steps.push({ a: pick.a, op: pick.op, b: id });
+    pick = null;
+    made(6 + state.steps.length - 1);
+  }
+  function tapOp(op) {
+    if (!playable()) return;
+    say('');
+    if (!pick) { say('Pick a number first'); return; }
+    pick = { a: pick.a, op: pick.op === op ? undefined : op };
+    renderBoard();
+  }
+  /* A new number counts straight away. */
+  function made(id) {
+    const { vals } = board(), v = vals[id];
+    if (!state.attempts.some((a) => a.value === v)) state.attempts.push({ value: v });
+    if (!state.best || off(v) < off(state.best.value)) state.best = { value: v, steps: stepsFor(id, vals) };
+    if (v === P().target) return finish('exact');
     save();
-    renderAttempts();
+    renderBoard(); renderAttempts();
+  }
+  function undo() {
+    if (!playable() || !state.steps.length) return;
+    state.steps.pop(); pick = null; say('');
+    save(); renderBoard();
+  }
+  function reset() {
+    if (!playable() || !state.steps.length) return;
+    state.steps = []; pick = null; say('');
+    save(); renderBoard();
   }
   function timeUp(quiet) { finish(state.best ? 'closest' : 'timeout', quiet); }
   function finish(outcome, quiet) {
@@ -162,40 +246,33 @@
     if (timed()) state.timeMs = Math.min(LIMIT, Date.now() - state.startedAt);
     if (state.kind === 'daily') recordStats();
     justFinished = !quiet;
-    revealArmed = false;
+    revealArmed = false; pick = null;
     save();
-    if (isOpen && !quiet) { $('cdMsg').textContent = ''; render(); $('cdResult').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    if (isOpen && !quiet) { say(''); render(); $('cdResult').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
-  /* Where the next key goes: the cursor if the box has focus, otherwise the end. */
-  function caret() {
-    const el = $('cdInput'), end = el.value.length;
-    return document.activeElement === el ? [el.selectionStart ?? end, el.selectionEnd ?? end] : [end, end];
+
+  /* Keyboard: type a number to pick that tile, then + - * /, then another number.
+     A number that could still grow (5 when there's also a 50) waits a moment. */
+  function typeDigit(d) {
+    const { vals, slots } = board(), live = slots.filter((id) => id !== null);
+    const tryBuf = (buf) => live.filter((id) => String(vals[id]).startsWith(buf) && !(pick && !pick.op && pick.a === id));
+    clearTimeout(typedTimer);
+    typed += d;
+    if (!tryBuf(typed).length) typed = d;
+    const cands = tryBuf(typed);
+    if (!cands.length) { typed = ''; say(`${d} isn't one of your numbers`); return; }
+    const exact = cands.find((id) => String(vals[id]) === typed);
+    const longer = cands.some((id) => String(vals[id]).length > typed.length);
+    if (exact !== undefined && !longer) { typed = ''; tapTile(exact); }
+    else if (exact !== undefined) typedTimer = setTimeout(() => { typed = ''; tapTile(exact); }, 700);
   }
-  /* Insert text at the cursor, as typing would. */
-  function insert(text) {
-    const el = $('cdInput'), [a, b] = caret();
-    el.setRangeText(text, a, b, 'end');
-    afterEdit();
-  }
-  function backspace() {
-    const el = $('cdInput');
-    let [a, b] = caret();
-    if (a === b) {
-      // Delete a whole number at once, and the spaces around a symbol.
-      const before = el.value.slice(0, a);
-      const m = before.match(/(\d+|\s*[^\s\d]\s*|\s+)$/);
-      a = m ? a - m[0].length : Math.max(0, a - 1);
-    }
-    el.setRangeText('', a, b, 'end');
-    afterEdit();
-  }
-  function afterEdit() {
-    const el = $('cdInput'), pos = el.selectionStart;
-    // Show the proper symbols, whichever key was used. Each swap is one character, so the cursor stays put.
-    const shown = el.value.replace(/-/g, C.MINUS).replace(/[*xX]/g, C.TIMES).replace(/\//g, C.DIVIDE);
-    if (shown !== el.value) { el.value = shown; el.setSelectionRange(pos, pos); }
-    $('cdMsg').textContent = '';
-    markTiles(); preview();
+  function onKey(e) {
+    if (!isOpen || !state || state.status !== 'playing' || document.querySelector('dialog[open]') || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (/^[0-9]$/.test(k)) { e.preventDefault(); typeDigit(k); }
+    else if (k === '+' || k === '-' || k === '*' || k === '/' || k === 'x' || k === 'X') { e.preventDefault(); tapOp(k === 'x' || k === 'X' ? '*' : k); }
+    else if (k === 'Backspace') { e.preventDefault(); if (pick) { pick = null; renderBoard(); } else undo(); }
+    else if (k === 'Escape') { pick = null; typed = ''; renderBoard(); }
   }
 
   /* ---------- statistics ---------- */
@@ -273,29 +350,17 @@
   const openHelp = () => $('dlgCountdown').showModal();
 
   /* ---------- wiring ---------- */
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
   function init(d) {
     deps = d;
-    const input = $('cdInput');
-    // On touch screens the tiles and symbol keys do the typing, so keep the phone keyboard away.
-    if (coarse) input.inputMode = 'none';
     $('cdStart').addEventListener('click', start);
-    // Tapping a number or symbol shouldn't take the cursor out of the box.
-    ['cdTiles', 'cdOps'].forEach((id) => $(id).addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); }));
-    $('cdTiles').addEventListener('click', (e) => {
-      const t = e.target.closest('.cd-tile[data-v]');
-      if (!t || state.status !== 'playing' || t.classList.contains('used')) return;
-      insert(t.dataset.v);
-    });
+    $('cdTiles').addEventListener('click', (e) => { const t = e.target.closest('.cd-tile[data-id]'); if (t && !t.disabled) tapTile(+t.dataset.id); });
     $('cdOps').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b || state.status !== 'playing') return;
-      if (b.dataset.op === 'del') backspace();
-      else if (b.dataset.op === 'clear') { input.value = ''; afterEdit(); }
-      else insert(/[()]/.test(b.dataset.op) ? b.dataset.op : ` ${b.dataset.op} `);
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'undo') undo();
+      else if (b.dataset.act === 'reset') reset();
+      else tapOp({ '+': '+', [C.MINUS]: '-', [C.TIMES]: '*', [C.DIVIDE]: '/' }[b.dataset.op]);
     });
-    input.addEventListener('input', afterEdit);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-    $('cdCheck').addEventListener('click', submit);
+    document.addEventListener('keydown', onKey);
     $('cdGiveUp').addEventListener('click', () => {
       if (!revealArmed) { revealArmed = true; $('cdGiveUp').textContent = 'Tap again to show a solution'; $('cdGiveUp').classList.add('arm'); return; }
       finish(state.best ? 'closest' : 'revealed');
@@ -315,7 +380,7 @@
     if (kind === 'archive' && arg < today.epochDay) load(deps.infoFromEpoch(arg), 'archive');
     else load(today, 'daily');
   }
-  function close() { save(); isOpen = false; revealArmed = false; }
+  function close() { save(); isOpen = false; revealArmed = false; pick = null; }
   function newDay() {
     // Never swap the puzzle mid-round; the result screen points to the new one instead.
     if (isOpen && state && state.kind === 'daily' && state.status !== 'playing') { save(); load(deps.dayInfo(deps.nowDate()), 'daily'); deps.toast('A new countdown is live'); }

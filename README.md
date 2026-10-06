@@ -35,7 +35,7 @@ Each game lives in its own folder, and everything they share lives in `shared/`.
 | `lattice/engine.js` | The Lattice engine: generator, uniqueness solver, hint and solution steps |
 | `lattice/app.js` | The Lattice screen: grid, keypad, checking, hints, statistics |
 | `countdown/engine.js` | The Countdown engine: seeded draw, solver, target choice and answer checker |
-| `countdown/app.js` | The Countdown screen: Start, 60-second clock, tiles and symbol keys, statistics, sharing |
+| `countdown/app.js` | The Countdown screen: Start, 60-second clock, step-by-step working, statistics, sharing |
 | `tests/algebra.test.js` | Checks that algebra puzzles and their worked solutions are correct |
 | `tests/lattice.test.js` | Checks that every Lattice puzzle has exactly one solution and correct steps |
 | `tests/countdown.test.js` | Checks ten years of Countdown puzzles and the answer checker's rules |
