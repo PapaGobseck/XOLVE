@@ -309,6 +309,9 @@ dialog::backdrop{background:rgba(10,16,30,.45)}
 .cd-clock b{min-width:2ch;font-family:var(--serif);font-size:1.5rem;font-weight:400}
 .cd-clock.low .cd-track i{background:var(--pen)}
 .cd-clock.low b{color:var(--pen)}
+.cd-finish{margin-top:12px}
+.cd-finish[hidden]{display:none}
+.cd-finish.arm{background:var(--pen)}
 .cd-best{margin:16px 0 0;color:var(--muted)}
 .cd-best b{font-family:var(--serif);font-size:1.4rem;font-weight:400;color:var(--ink)}
 .cd-tries{display:flex;gap:8px 14px;justify-content:center;flex-wrap:wrap;margin:8px 0 0;padding:0;list-style:none;font-family:var(--serif);font-size:1.1rem;color:var(--muted);font-variant-numeric:tabular-nums}

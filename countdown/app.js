@@ -33,6 +33,7 @@
   const remaining = () => Math.max(0, LIMIT - (Date.now() - state.startedAt));
   const SYM = { '+': '+', '-': C.MINUS, '*': C.TIMES, '/': C.DIVIDE };
   let pick = null;          // { a: tile id, op } while building a step
+  let finishArmed = false;  // Finish needs a second tap
   let typed = '', typedTimer = null;
 
   /* The value of each tile, and which tile sits in each of the six places. */
@@ -87,7 +88,7 @@
     if (!Array.isArray(state.steps)) state.steps = [];
     // An archive round is never timed, even if it was started as a daily one.
     if (kind === 'archive' && state.status === 'ready') state.status = 'playing';
-    justFinished = false; revealArmed = false; pick = null; typed = '';
+    justFinished = false; revealArmed = false; finishArmed = false; pick = null; typed = '';
     $('cdMsg').textContent = '';
     if (timed() && state.status === 'playing' && remaining() <= 0) timeUp(true);
     render();
@@ -96,7 +97,7 @@
   function loadPractice() {
     const puzzle = C.buildPuzzle((Math.random() * 4294967296) >>> 0, { id: 'practice', date: null });
     state = { kind: 'practice', puzzle, steps: [], attempts: [], best: null, status: 'playing' };
-    justFinished = false; revealArmed = false; pick = null; typed = '';
+    justFinished = false; revealArmed = false; finishArmed = false; pick = null; typed = '';
     $('cdMsg').textContent = '';
     render();
   }
@@ -120,7 +121,8 @@
     const on = st === 'playing';
     $('cdPlay').hidden = !on;
     $('cdClock').hidden = !(on && timed());
-    $('cdGiveUp').hidden = !(on && !timed());
+    // Once you've made a number, Finish takes over from Show a solution.
+    $('cdGiveUp').hidden = !(on && !timed() && !state.best);
     if (!revealArmed) { $('cdGiveUp').textContent = 'Show a solution'; $('cdGiveUp').classList.remove('arm'); }
     renderBoard();
     renderAttempts();
@@ -159,6 +161,12 @@
     $('cdBest').hidden = !b || state.status !== 'playing';
     if (b) $('cdBest').innerHTML = `Closest so far: <b>${b.value}</b> <span>(${off(b.value)} away)</span>`;
     $('cdTries').innerHTML = state.status === 'playing' ? state.attempts.map((a) => `<li>${a.value}</li>`).join('') : '';
+    const fin = $('cdFinish');
+    fin.hidden = !b || state.status !== 'playing';
+    if (b) fin.textContent = finishArmed ? `Tap again to finish with ${b.value}` : `Finish with ${b.value}`;
+    fin.classList.toggle('arm', finishArmed);
+    if (!b) $('cdGiveUp').hidden = state.status !== 'playing' || timed();
+    else $('cdGiveUp').hidden = true;
   }
   function renderClock() {
     if (!timed() || state.status !== 'playing') return;
@@ -213,9 +221,10 @@
     return true;
   }
   /* Tapping a number: start a step, change the first number, or finish the step. */
+  function disarm() { if (finishArmed) { finishArmed = false; renderAttempts(); } }
   function tapTile(id) {
     if (!playable()) return;
-    say('');
+    say(''); disarm();
     if (!pick || !pick.op) { pick = pick && pick.a === id ? null : { a: id }; return renderBoard(); }
     if (pick.a === id) { pick = { a: id }; return renderBoard(); }
     const { vals } = board(), r = apply(vals[pick.a], pick.op, vals[id]);
@@ -226,7 +235,7 @@
   }
   function tapOp(op) {
     if (!playable()) return;
-    say('');
+    say(''); disarm();
     if (!pick) { say('Pick a number first'); return; }
     pick = { a: pick.a, op: pick.op === op ? undefined : op };
     renderBoard();
@@ -242,11 +251,13 @@
   }
   function undo() {
     if (!playable() || !state.steps.length) return;
+    disarm();
     state.steps.pop(); pick = null; say('');
     save(); renderBoard();
   }
   function reset() {
     if (!playable() || !state.steps.length) return;
+    disarm();
     state.steps = []; pick = null; say('');
     save(); renderBoard();
   }
@@ -257,7 +268,7 @@
     if (timed()) state.timeMs = Math.min(LIMIT, Date.now() - state.startedAt);
     if (state.kind === 'daily') recordStats();
     justFinished = !quiet;
-    revealArmed = false; pick = null;
+    revealArmed = false; finishArmed = false; pick = null;
     save();
     if (isOpen && !quiet) { say(''); render(); $('cdResult').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
@@ -372,6 +383,11 @@
       else tapOp({ '+': '+', [C.MINUS]: '-', [C.TIMES]: '*', [C.DIVIDE]: '/' }[b.dataset.op]);
     });
     document.addEventListener('keydown', onKey);
+    $('cdFinish').addEventListener('click', () => {
+      if (!playable() || !state.best) return;
+      if (!finishArmed) { finishArmed = true; renderAttempts(); return; }
+      finish('closest');
+    });
     $('cdGiveUp').addEventListener('click', () => {
       if (!revealArmed) { revealArmed = true; $('cdGiveUp').textContent = 'Tap again to show a solution'; $('cdGiveUp').classList.add('arm'); return; }
       finish(state.best ? 'closest' : 'revealed');
@@ -393,7 +409,7 @@
     if (kind === 'archive' && arg < today.epochDay) load(deps.infoFromEpoch(arg), 'archive');
     else load(today, 'daily');
   }
-  function close() { save(); isOpen = false; revealArmed = false; pick = null; }
+  function close() { save(); isOpen = false; revealArmed = false; finishArmed = false; pick = null; }
   function newDay() {
     // Never swap the puzzle mid-round; the result screen points to the new one instead.
     if (isOpen && state && state.kind === 'daily' && state.status !== 'playing') { save(); load(deps.dayInfo(deps.nowDate()), 'daily'); deps.toast('A new countdown is live'); }
