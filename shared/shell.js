@@ -8,6 +8,8 @@
  *   init(deps), open(kind, arg), close(), newDay(),
  *   archiveStatus(info) -> [cssClass, label], levelIndex(epochDay), levelName(epochDay),
  *   renderStats(), openHelp(), openBook(), resultHost()
+ * Optional: practice: false hides the Practice tab for that game, and levelIndex()
+ * returning null draws an archive row without difficulty pips.
  * open() is called as open('daily'), open('archive', epochDay) or open('practice', level).
  */
 const XolveShell = (() => {
@@ -69,7 +71,11 @@ const XolveShell = (() => {
   function register(id, game) { games[id] = game; order.push(id); }
 
   let curGame = null, mode = 'daily', today = null;
-  const levelFor = (g) => store.get(games[g].levelKey) || 'medium';
+  /* The saved practice level, or medium (or the game's first level if it has no medium). */
+  function levelFor(g) {
+    const ids = (games[g].levels || []).map((l) => l.id), saved = store.get(games[g].levelKey);
+    return ids.includes(saved) ? saved : ids.includes('medium') ? 'medium' : ids[0];
+  }
 
   /* Show one screen: the archive or a game's view. */
   function showView(id) {
@@ -80,7 +86,9 @@ const XolveShell = (() => {
   /* ---------- navigation: pick a game, then Today / Archive / Practice ---------- */
   function go(g, m) {
     if (curGame) games[curGame].close();
+    if (m === 'practice' && games[g].practice === false) m = 'daily';
     curGame = g; mode = m;
+    document.querySelector('.mode[data-mode="practice"]').hidden = games[g].practice === false;
     document.querySelectorAll('.game').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.game === g)));
     document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     renderLevels();
@@ -115,9 +123,9 @@ const XolveShell = (() => {
     $('archList').innerHTML = days.map((d) => {
       const [cls, label] = G.archiveStatus(d);
       const lvl = G.levelIndex(d.epochDay), lvlName = G.levelName(d.epochDay);
-      const pips = [0, 1, 2, 3].map((i) => `<span${i <= lvl ? ' class="on"' : ''}></span>`).join('');
+      const pips = lvl === null ? '' : [0, 1, 2, 3].map((i) => `<span${i <= lvl ? ' class="on"' : ''}></span>`).join('');
       const when = d.epochDay === today.epochDay ? 'Today' : fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' });
-      return `<li><button class="arch-row" data-epoch="${d.epochDay}" aria-label="${G.archiveLabel} ${d.number}, ${when}, ${lvlName}, ${label}"><span class="an">#${d.number}</span><span>${when}</span><span class="pips" aria-hidden="true">${pips}</span><span class="as ${cls}">${label}</span></button></li>`;
+      return `<li><button class="arch-row" data-epoch="${d.epochDay}" aria-label="${G.archiveLabel} ${d.number}, ${when}, ${lvlName ? lvlName + ', ' : ''}${label}"><span class="an">#${d.number}</span><span>${when}</span><span class="pips" aria-hidden="true">${pips}</span><span class="as ${cls}">${label}</span></button></li>`;
     }).join('');
   }
 
