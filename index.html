@@ -31,6 +31,8 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
 <script src="algebra/app.js" defer></script>
 <script src="lattice/engine.js" defer></script>
 <script src="lattice/app.js" defer></script>
+<script src="countdown/engine.js" defer></script>
+<script src="countdown/app.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -55,6 +57,7 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
   <nav class="games" aria-label="Game">
     <button class="game" data-game="algebra" aria-pressed="true">Algebra</button>
     <button class="game" data-game="lattice" aria-pressed="false">Lattice</button>
+    <button class="game" data-game="countdown" aria-pressed="false">Countdown</button>
   </nav>
   <nav class="modes" aria-label="Mode">
     <button class="mode" data-mode="daily" aria-pressed="true">Today</button>
@@ -76,6 +79,51 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
       <p id="archEmptyText"></p>
       <button class="check" id="btnToday">Play today's puzzle</button>
     </div>
+  </section>
+
+  <section class="cd-view" id="countdown" hidden aria-label="Countdown puzzle">
+    <div style="text-align:center"><button class="back" id="cdBack" hidden>Back to archive</button></div>
+    <p class="meta"><span id="cdLabel"></span><span id="cdDate"></span></p>
+    <p class="prompt">Make the target</p>
+    <p class="cd-target" id="cdTarget"></p>
+    <div class="cd-tiles" id="cdTiles" role="group" aria-label="Your numbers"></div>
+    <button class="check cd-start" id="cdStart" hidden>Start</button>
+    <p class="cd-note" id="cdStartNote" hidden>The numbers appear when you press Start, and you have 60 seconds.</p>
+    <div id="cdPlay" hidden>
+      <div class="cd-clock" id="cdClock" hidden><span class="cd-track"><i id="cdBar"></i></span><b id="cdSecs">60</b></div>
+      <div class="cd-entry">
+        <input id="cdInput" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" aria-label="Your calculation" aria-describedby="cdMsg">
+        <span class="cd-preview" id="cdPreview" aria-live="polite"></span>
+      </div>
+      <div class="keypad cd-ops" id="cdOps" role="group" aria-label="Symbols">
+        <button data-op="+" aria-label="plus">+</button><button data-op="−" aria-label="minus">−</button><button data-op="×" aria-label="times">×</button><button data-op="÷" aria-label="divide">÷</button><button data-op="(" aria-label="open bracket">(</button><button data-op=")" aria-label="close bracket">)</button>
+        <button data-op="clear" class="wide">Clear</button><button data-op="del" class="wide" aria-label="Delete">⌫</button>
+      </div>
+      <p class="msg" id="cdMsg" aria-live="polite"></p>
+      <button class="check" id="cdCheck">Check</button>
+      <p class="cd-best" id="cdBest" hidden></p>
+      <ul class="cd-tries" id="cdTries" aria-label="Results so far"></ul>
+      <div class="lat-links">
+        <button class="reveal-btn" id="cdHow">How to play</button>
+        <button class="reveal-btn" id="cdGiveUp" hidden>Show a solution</button>
+      </div>
+    </div>
+
+    <section class="result" id="cdResult" hidden>
+      <p class="verdict" id="cdVerdict"></p>
+      <p class="summary" id="cdSummary"></p>
+      <div class="work cd-work">
+        <div id="cdYours"><h2 id="cdYoursHead">Your closest</h2><p class="cd-calc" id="cdYoursCalc"></p></div>
+        <h2>One way to make it</h2>
+        <p class="cd-calc" id="cdSolution"></p>
+      </div>
+      <div class="actions">
+        <button class="check" id="cdShare">Share result</button>
+        <button class="ghost" id="cdArchive" hidden>Past countdowns</button>
+        <button class="ghost" id="cdArchiveBack" hidden>Back to archive</button>
+      </div>
+      <p class="next" id="cdNext"></p>
+    </section>
   </section>
 
   <section class="lat-view" id="lattice" hidden aria-label="Lattice puzzle">
@@ -188,6 +236,12 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
     <h3>Solved by difficulty</h3>
     <div id="latDist"></div>
   </div>
+  <h3 class="stats-h">Countdown</h3>
+  <div class="figs" id="cdStats"></div>
+  <div class="dist">
+    <h3>How close you got</h3>
+    <div id="cdDist"></div>
+  </div>
 </dialog>
 
 <dialog id="dlgBook" class="book-dlg" aria-labelledby="bookTitle">
@@ -243,6 +297,26 @@ try { var t = JSON.parse(localStorage.getItem('xolve:theme')); if (t === 'dark' 
     <h3>Check your answer</h3>
     <p>Put your value of <var>x</var> back into the original equation. If both sides come out the same, you're right.</p>
     <div class="ex"><span class="eqn">3(<var>x</var> + 4) = 21 with <var>x</var> = 3</span><span class="why">3 × 7 = 21</span><span class="eqn">✓</span></div>
+  </div>
+</dialog>
+
+<dialog id="dlgCountdown" class="book-dlg" aria-labelledby="cdHelpTitle">
+  <div class="dlg-head"><h2 id="cdHelpTitle">How to play Countdown</h2><button class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="book">
+    <p>Use some or all of six numbers to make the target, with + − × and ÷. Like the numbers round on Countdown.</p>
+    <h3>The rules</h3>
+    <p>Each number can be used once at most, and you don't have to use them all. Every step has to give a whole number of zero or more, so no fractions and nothing below zero.</p>
+    <p>Calculations follow the usual order: × and ÷ before + and −, then left to right. Use brackets to change the order. For example, with 75, 10, 5 and 3, (75 − 5) × 10 + 3 makes 703.</p>
+    <h3>Today's puzzle</h3>
+    <p>You can see the target straight away. The numbers stay covered until you press Start, then you have 60 seconds. The clock keeps running if you leave the page.</p>
+    <p>Try as many calculations as you like. Your closest result counts, and hitting the target exactly ends the round. If time runs out with no answer, the round counts as out of time.</p>
+    <p>Every puzzle can be solved exactly. When the round ends you'll see one way to do it.</p>
+    <h3>Entering a calculation</h3>
+    <p>Tap the numbers and symbols, or type on a keyboard. As long as your calculation follows the rules, you'll see what it makes as you go. Press Check to try it. A calculation that breaks a rule tells you why and doesn't count.</p>
+    <h3>Past countdowns</h3>
+    <p>Puzzles in the archive aren't timed, and they don't affect your streak or statistics. If you're stuck, Show a solution ends the round.</p>
+    <h3>Statistics</h3>
+    <p>Your streak counts days in a row where you hit the target exactly. The statistics also show how close you got each day: exact, 1–5 away, 6–10 away, 11 or more away, or no answer.</p>
   </div>
 </dialog>
 

@@ -2,10 +2,11 @@
 
 **One equation. Every day. Actually solve it.**
 
-XOLVE is a Wordle-style daily maths puzzle with two games:
+XOLVE is a Wordle-style daily maths puzzle with three games:
 
 - **Algebra:** everyone gets the same equation each day, and the job is to solve it for *x*. You get 6 attempts, a timer, a streak, and the worked solution once you finish.
 - **Lattice:** a multiplication laid out as a lattice (Chinese multiplication) grid, with digits hidden. Fill in every missing digit, with unlimited checks and hints that explain each step.
+- **Countdown:** reach a target from 100 to 999 using six numbers and + − × ÷, like the numbers round on Countdown. The numbers are hidden until you press Start, then you have 60 seconds and your closest result counts. Past countdowns in the archive are untimed.
 
 ## Features
 
@@ -33,8 +34,11 @@ Each game lives in its own folder, and everything they share lives in `shared/`.
 | `algebra/app.js` | The algebra screen: answer checking, hints, timer, statistics, sharing |
 | `lattice/engine.js` | The Lattice engine: generator, uniqueness solver, hint and solution steps |
 | `lattice/app.js` | The Lattice screen: grid, keypad, checking, hints, statistics |
+| `countdown/engine.js` | The Countdown engine: seeded draw, solver, target choice and answer checker |
+| `countdown/app.js` | The Countdown screen: Start, 60-second clock, tiles and symbol keys, statistics, sharing |
 | `tests/algebra.test.js` | Checks that algebra puzzles and their worked solutions are correct |
 | `tests/lattice.test.js` | Checks that every Lattice puzzle has exactly one solution and correct steps |
+| `tests/countdown.test.js` | Checks ten years of Countdown puzzles and the answer checker's rules |
 | `images/` | Icons and the link-preview image |
 | `wrangler.jsonc`, `.assetsignore` | Cloudflare Workers settings, and the files Cloudflare shouldn't publish |
 
@@ -96,6 +100,7 @@ The same deduction engine powers the hints and the worked solution. It looks for
 ```
 node tests/algebra.test.js
 node tests/lattice.test.js
+node tests/countdown.test.js
 ```
 
 This generates thousands of puzzles from every template, plus five years of daily puzzles. It checks every line of every worked solution, makes sure each equation has one whole-number answer, and confirms no template repeats on back-to-back days.
