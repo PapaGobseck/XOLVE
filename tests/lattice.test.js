@@ -1,7 +1,7 @@
 // Checks Lattice puzzles at every level: one solution each, no leading zero in the product,
 // correct hint/solution steps, and no more "try the options" steps than the level allows.
 // Run with: node tests/lattice.test.js
-const X = require('../lattice.js');
+const X = require('../lattice/engine.js');
 
 const problems = [];
 const PER_LEVEL = 100;

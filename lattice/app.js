@@ -1,8 +1,9 @@
 /*
  * XOLVE Lattice mode: the grid, keypad, checking, hints, statistics and worked solution.
- * Needs lattice.js. app.js starts it with init() and shows or hides it with open() / close().
+ * Needs lattice/engine.js and shared/shell.js. The shell starts it with init() and
+ * shows or hides it with open() / close().
  */
-const XolveLatticeUI = (() => {
+(() => {
   'use strict';
   const X = XolveLatticeEngine;
   const $ = (id) => document.getElementById(id);
@@ -431,5 +432,12 @@ const XolveLatticeUI = (() => {
     if (isOpen && state && state.kind === 'daily') { save(); loadDay(deps.dayInfo(deps.nowDate()), 'daily'); deps.toast('A new lattice is live'); }
   }
 
-  return { init, open, close, newDay, renderStats, openHelp, archiveStatus, levelIndex, levelName, LEVEL_ORDER: X.LEVEL_ORDER, LEVELS: X.LEVELS };
+  XolveShell.register('lattice', {
+    name: 'Lattice', view: 'lattice', archiveLabel: 'Lattice', levelKey: 'xolve:latticeLevel',
+    levels: X.LEVEL_ORDER.map((id) => ({ id, name: X.LEVELS[id].name })),
+    init, open, close, newDay, archiveStatus, levelIndex, levelName,
+    renderStats: () => renderStats($('latStats'), $('latDist')),
+    openHelp, openBook: openHelp,
+    resultHost: () => $('latResult'),
+  });
 })();

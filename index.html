@@ -22,11 +22,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
-<script src="generator.js" defer></script>
-<script src="lattice.js" defer></script>
-<script src="lattice-app.js" defer></script>
-<script src="app.js" defer></script>
+<link rel="stylesheet" href="shared/style.css">
+<script src="shared/calendar.js" defer></script>
+<script src="shared/shell.js" defer></script>
+<script src="algebra/engine.js" defer></script>
+<script src="algebra/app.js" defer></script>
+<script src="lattice/engine.js" defer></script>
+<script src="lattice/app.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -54,12 +56,7 @@
     <button class="mode" data-mode="archive" aria-pressed="false">Archive</button>
     <button class="mode" data-mode="practice" aria-pressed="false">Practice</button>
   </nav>
-  <div class="levels" id="levels" hidden role="group" aria-label="Practice difficulty">
-    <button class="level" data-level="easy">Easy</button>
-    <button class="level" data-level="medium">Medium</button>
-    <button class="level" data-level="hard">Hard</button>
-    <button class="level" data-level="expert" id="lastLevel">Expert</button>
-  </div>
+  <div class="levels" id="levels" hidden role="group" aria-label="Practice difficulty"></div>
 
   <section class="archive" id="archive" hidden aria-label="Past puzzles">
     <ol class="arch-list" id="archList"></ol>
