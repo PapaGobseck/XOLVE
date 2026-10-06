@@ -121,6 +121,29 @@ const XolveShell = (() => {
     }).join('');
   }
 
+  /* ---------- dark mode switch ----------
+     Untouched, the site follows the device (and keeps following it while open).
+     Flipping the switch saves a choice that overrides the device; flipping it back
+     to match the device clears the choice, so the site follows the device again. */
+  const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const deviceTheme = () => (darkQuery.matches ? 'dark' : 'light');
+  function applyTheme() {
+    const chosen = store.get('xolve:theme');
+    const root = document.documentElement;
+    if (chosen === 'dark' || chosen === 'light') root.dataset.theme = chosen; else delete root.dataset.theme;
+    $('btnTheme').setAttribute('aria-checked', String((chosen || deviceTheme()) === 'dark'));
+  }
+  function toggleTheme() {
+    const next = $('btnTheme').getAttribute('aria-checked') === 'true' ? 'light' : 'dark';
+    store.set('xolve:theme', next === deviceTheme() ? null : next);
+    applyTheme();
+  }
+
+  /* ---------- "New here?" note ----------
+     Shown until it's dismissed. Players who already saw the old automatic How to play don't get it. */
+  const introSeen = () => store.get('xolve:introDismissed') || store.get('xolve:seenHelp') || store.get('xolve:seenLatticeHelp');
+  function dismissIntro() { store.set('xolve:introDismissed', true); $('intro').hidden = true; }
+
   /* ---------- statistics dialog: every game fills in its own section ---------- */
   function openStats() {
     order.forEach((g) => games[g].renderStats());
@@ -157,9 +180,13 @@ const XolveShell = (() => {
     $('btnStats').addEventListener('click', openStats);
     $('btnHelp').addEventListener('click', () => games[curGame].openHelp());
     $('btnBook').addEventListener('click', () => games[curGame].openBook());
+    $('btnTheme').addEventListener('click', toggleTheme);
+    darkQuery.addEventListener('change', applyTheme);
+    $('introHow').addEventListener('click', () => games[curGame].openHelp());
+    $('introClose').addEventListener('click', dismissIntro);
     $('btnHome').addEventListener('click', () => {
       document.querySelectorAll('dialog[open]').forEach((d) => d.close());
-      go(order[0], 'daily');
+      go(curGame, 'daily');
       window.scrollTo({ top: 0 });
     });
     document.querySelectorAll('dialog').forEach((d) => {
@@ -170,6 +197,8 @@ const XolveShell = (() => {
   /* ---------- start-up (after every game's script has registered) ---------- */
   function boot() {
     order.forEach((g) => { $(games[g].view).hidden = true; });
+    applyTheme();
+    $('intro').hidden = !!introSeen();
     wire();
     syncClock().then(() => {
       const deps = { store, nowDate, dayInfo: Cal.dayInfo, infoFromEpoch: Cal.infoFromEpoch, toast, fmtTime, fmtDay, share: copyText, go };
