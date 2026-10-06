@@ -21,18 +21,31 @@ XOLVE is a Wordle-style daily maths puzzle with two games:
 
 ## Files
 
+Each game lives in its own folder, and everything they share lives in `shared/`.
+
 | File | What it does |
 | --- | --- |
-| `index.html` | Page structure: header, tabs, equation area, archive list, dialogs |
-| `style.css` | All styling, including dark mode and mobile layout |
-| `generator.js` | The puzzle engine: templates, seeding and daily puzzle selection |
-| `app.js` | The algebra game: answer checking, timer, statistics, archive, sharing |
-| `lattice.js` | The Lattice engine: generator, uniqueness solver, hint and solution steps |
-| `lattice-app.js` | The Lattice screen: grid, keypad, checking, hints, statistics |
-| `tests/generator.test.js` | Checks that algebra puzzles and their worked solutions are correct |
+| `index.html` | Page structure: header, game and mode tabs, every game's screen, dialogs |
+| `shared/style.css` | All styling, including dark mode and mobile layout |
+| `shared/calendar.js` | Dates and puzzle numbers, the same for every game |
+| `shared/shell.js` | Trusted clock, storage, sharing, navigation, the archive list, the statistics dialog and start-up |
+| `algebra/engine.js` | The algebra puzzle engine: templates, seeding and daily puzzle selection |
+| `algebra/app.js` | The algebra screen: answer checking, hints, timer, statistics, sharing |
+| `lattice/engine.js` | The Lattice engine: generator, uniqueness solver, hint and solution steps |
+| `lattice/app.js` | The Lattice screen: grid, keypad, checking, hints, statistics |
+| `tests/algebra.test.js` | Checks that algebra puzzles and their worked solutions are correct |
 | `tests/lattice.test.js` | Checks that every Lattice puzzle has exactly one solution and correct steps |
+| `images/` | Icons and the link-preview image |
+| `wrangler.jsonc`, `.assetsignore` | Cloudflare Workers settings, and the files Cloudflare shouldn't publish |
 
 There's no build step and no dependencies.
+
+### Adding a game
+
+1. Create a folder for it, such as `countdown/`, with an `engine.js` for the puzzles and an `app.js` for the screen.
+2. In `app.js`, call `XolveShell.register()` with the game's screen, levels and functions. The comment at the top of `shared/shell.js` lists what the shell expects, and `lattice/app.js` is a complete example.
+3. Add the game's screen and a tab button (`<button class="game" data-game="...">`) to `index.html`, and its two `<script>` tags after the existing games.
+4. Add a test file to `tests/`.
 
 ## Running it locally
 
@@ -44,11 +57,9 @@ python -m http.server 8000
 
 Then open http://localhost:8000.
 
-## Deploying to GitHub Pages
+## Deploying
 
-1. Push these files to the root of a GitHub repository.
-2. Go to **Settings → Pages**, set the source to **Deploy from a branch**, and choose `main` and `/ (root)`.
-3. After a minute or so, the site will be at `https://<username>.github.io/<repo>/`.
+The site runs on Cloudflare Workers, connected to this GitHub repository. Pushing to `main` updates https://xolve.games. With preview URLs turned on, pushing to any other branch (such as `dev`) builds a preview version with its own link, which doesn't affect the live site.
 
 ## How puzzles are made
 
@@ -61,9 +72,9 @@ Each equation is built **backwards**. The generator picks the answer first, then
 
 ### Changing the generator
 
-- **Launch date:** `LAUNCH_EPOCH_DAY` at the top of `generator.js` sets the date of puzzle #1. Set it earlier if you want the archive to have puzzles in it at launch.
+- **Launch date:** `LAUNCH_EPOCH_DAY` at the top of `shared/calendar.js` sets the date of puzzle #1. It's shared by every game.
 - **Adding templates:** add a function to the right level in `TEMPLATES`, following the existing pattern, then run the tests.
-- **After launch, any change to the generator also changes past puzzles in the archive**, because they're regenerated from the date each time. Make template changes before you share the game.
+- **After launch, any change to an engine also changes past puzzles in the archive**, because they're regenerated from the date each time. Make template changes before you share the game.
 
 ## How Lattice puzzles are made
 
@@ -74,7 +85,7 @@ Each equation is built **backwards**. The generator picks the answer first, then
 | Hard | 4-digit × 3-digit | 24 of 38 | 5 | 1 |
 | Extreme | 4-digit × 3-digit | 29 of 38 | 6 | 2 |
 
-The daily lattice follows the week like the algebra puzzle: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, extreme at the weekend. These settings live in `LEVELS` at the top of `lattice.js`.
+The daily lattice follows the week like the algebra puzzle: easy on Monday, medium Tuesday and Wednesday, hard Thursday and Friday, extreme at the weekend. These settings live in `LEVELS` at the top of `lattice/engine.js`.
 
 The generator picks two numbers (digits 1–9, with no leading zero in the product) and fills the whole lattice. It then hides digits one at a time, trying digits of the two numbers first, then cells and product digits. After each removal a solver checks the puzzle still has exactly one solution. It stops when it reaches the level's number of hidden digits.
 
@@ -83,7 +94,7 @@ The same deduction engine powers the hints and the worked solution. It looks for
 ## Tests
 
 ```
-node tests/generator.test.js
+node tests/algebra.test.js
 node tests/lattice.test.js
 ```
 

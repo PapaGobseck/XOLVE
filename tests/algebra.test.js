@@ -1,5 +1,5 @@
-// Checks that every generated puzzle is correct. Run with: node tests/generator.test.js
-const G = require('../generator.js');
+// Checks that every generated algebra puzzle is correct. Run with: node tests/algebra.test.js
+const G = require('../algebra/engine.js');
 
 // Turn the puzzle notation into JavaScript so each line of working can be evaluated.
 const toJs = (s) => s

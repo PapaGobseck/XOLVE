@@ -1,12 +1,14 @@
 /*
- * XOLVE puzzle engine
+ * XOLVE Algebra engine
+ * Needs shared/calendar.js to be loaded first.
  * Builds every equation backwards from a chosen answer, so each puzzle has a known,
  * correct solution. The date is the seed, so every player gets the same daily puzzle.
  */
 const XolveGenerator = (() => {
   'use strict';
   const MINUS = '\u2212';
-  const LAUNCH_EPOCH_DAY = Date.UTC(2026, 9, 1) / 864e5; // Puzzle #1 = 1 October 2026
+  const Cal = typeof XolveCalendar !== 'undefined' ? XolveCalendar : require('../shared/calendar.js');
+  const { LAUNCH_EPOCH_DAY } = Cal;
   const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
   const WEEKDAY_DIFFICULTY = ['expert', 'easy', 'medium', 'medium', 'hard', 'hard', 'expert']; // Sun..Sat
   const MAX_ATTEMPTS = 6;
@@ -217,16 +219,10 @@ const XolveGenerator = (() => {
   }
 
   /* ---------- calendar ---------- */
-  const difficultyOn = (epochDay) => WEEKDAY_DIFFICULTY[(((epochDay + 4) % 7) + 7) % 7]; // 1 Jan 1970 was a Thursday
-  function infoFromEpoch(epochDay) {
-    const d = new Date(epochDay * 864e5);
-    const iso = d.toISOString().slice(0, 10);
-    return { epochDay, iso, number: epochDay - LAUNCH_EPOCH_DAY + 1, difficulty: difficultyOn(epochDay) };
-  }
-  function localEpochDay(date) {
-    return Math.round(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 864e5);
-  }
-  function dayInfo(date) { return infoFromEpoch(localEpochDay(date)); }
+  /* The shared calendar gives the date and puzzle number; algebra adds that day's difficulty. */
+  const difficultyOn = (epochDay) => WEEKDAY_DIFFICULTY[Cal.weekdayOf(epochDay)];
+  const infoFromEpoch = (epochDay) => Object.assign(Cal.infoFromEpoch(epochDay), { difficulty: difficultyOn(epochDay) });
+  const dayInfo = (date) => infoFromEpoch(Cal.localEpochDay(date));
 
   /* Templates are dealt like a shuffled deck: within a difficulty, every template is
      used once before any repeats, and the same one never appears twice in a row. */

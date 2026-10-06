@@ -1,6 +1,7 @@
 /*
- * XOLVE game: screens, answer checking, timer, statistics, archive and sharing.
- * Needs generator.js to be loaded first.
+ * XOLVE Algebra: the equation screen, answer checking, hints, timer, statistics and sharing.
+ * Needs algebra/engine.js and shared/shell.js. The shell starts it with init() and
+ * shows or hides it with open() / close().
  */
 (() => {
 'use strict';
@@ -8,12 +9,13 @@ const { DIFFICULTIES, MAX_ATTEMPTS, buildPuzzle, dailyPuzzle, dayInfo, infoFromE
 const $ = (id) => document.getElementById(id);
 const LEVEL_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 
-/* ---------- storage (localStorage, with in-memory fallback) ---------- */
-const mem = {};
-const store = {
-  get(k) { try { const v = localStorage.getItem(k); if (v !== null) return JSON.parse(v); } catch (e) {} return k in mem ? mem[k] : null; },
-  set(k, v) { mem[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
-};
+let deps;                    // from the shell: { store, nowDate, toast, fmtTime, fmtDay, share, go, ... }
+const store = { get: (k) => deps.store.get(k), set: (k, v) => deps.store.set(k, v) };
+const fmtTime = (ms) => deps.fmtTime(ms);
+const fmtDay = (info, opts) => deps.fmtDay(info, opts);
+const nowDate = () => deps.nowDate();
+const toast = (t) => deps.toast(t);
+
 const STATS_KEY = 'xolve:stats';
 function loadStats() {
   const base = { played: 0, won: 0, current: 0, max: 0, lastWinDay: null, lastPlayedDay: null, totalAttempts: 0, totalTime: 0,
@@ -36,34 +38,9 @@ function toHTML(s) {
 function toText(s) {
   return s.replace(/\{([^|}]*)\|([^}]*)\}/g, (m, a, b) => (a.includes(' ') ? `(${a})` : a) + '/' + (b.includes(' ') ? `(${b})` : b));
 }
-function fmtTime(ms) {
-  const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
-}
-
-/* ---------- trusted clock ----------
-   The day comes from the web server's clock (the Date header of this page),
-   read in the player's own time zone. Changing the device clock doesn't unlock tomorrow. */
-let clockOffset = 0;
-const nowDate = () => new Date(Date.now() + clockOffset);
-async function syncClock() {
-  try {
-    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 3000);
-    const t0 = Date.now();
-    const res = await fetch(location.href.split('#')[0], { method: 'HEAD', cache: 'no-store', signal: ctrl.signal });
-    const t1 = Date.now(); clearTimeout(timer);
-    const server = Date.parse(res.headers.get('Date') || '');
-    if (!isNaN(server)) clockOffset = server + 500 + (t1 - t0) / 2 - t1; // Date header is whole seconds
-  } catch (e) { /* offline or not served over HTTP: fall back to the device clock */ }
-}
-const fmtDay = (info, opts) => new Date(info.epochDay * 864e5).toLocaleDateString('en-GB', Object.assign({ timeZone: 'UTC' }, opts));
-
 /* ---------- game state ---------- */
-let mode = 'daily';          // daily | archive | practice
-let curGame = 'algebra';     // algebra | lattice
-let practiceLevel = store.get('xolve:practiceLevel') || 'medium';
-let latticeLevel = store.get('xolve:latticeLevel') || 'medium';
 let today, game, lastTick = 0, saveCounter = 0, justFinished = false, revealArmed = false;
+let isOpen = false;
 
 function loadDay(info, kind) {
   const key = 'xolve:day:' + info.iso;
@@ -72,34 +49,27 @@ function loadDay(info, kind) {
     attempts: saved ? saved.attempts : [], status: saved ? saved.status : 'playing', elapsed: saved ? saved.elapsed : 0,
     archived: saved ? !!saved.archived : kind === 'archive' };
   justFinished = false;
-  showView('sheet');
   render();
 }
 function startDaily() { today = dayInfo(nowDate()); loadDay(today, 'daily'); }
 function startArchivePuzzle(epochDay) {
+  today = dayInfo(nowDate());
   if (epochDay >= today.epochDay) return startDaily();
   loadDay(infoFromEpoch(epochDay), 'archive');
 }
-function startPractice() {
+function startPractice(level) {
   today = dayInfo(nowDate());
   const seed = (Math.random() * 4294967296) >>> 0;
-  const puzzle = buildPuzzle(seed, practiceLevel, { id: 'practice', date: null });
+  const puzzle = buildPuzzle(seed, level, { id: 'practice', date: null });
   game = { puzzle, kind: 'practice', daily: false, attempts: [], status: 'playing', elapsed: 0 };
   justFinished = false;
-  showView('sheet');
   render();
 }
 function saveGame() {
   if (game && game.key) store.set(game.key, { attempts: game.attempts, status: game.status, elapsed: Math.round(game.elapsed), archived: game.archived });
 }
 
-/* ---------- views ---------- */
-function showView(v) {
-  $('lattice').hidden = v !== 'lattice';
-  $('archive').hidden = v !== 'archive';
-  $('sheet').hidden = v !== 'sheet';
-  $('btnBack').hidden = !(v === 'sheet' && game && game.kind === 'archive');
-}
+/* ---------- archive rows (the list itself is drawn by the shell) ---------- */
 function archiveStatus(info) {
   const s = store.get('xolve:day:' + info.iso);
   if (!s || (!s.attempts.length && s.status === 'playing')) return ['', 'Play'];
@@ -107,29 +77,6 @@ function archiveStatus(info) {
   if (s.status === 'lost') return ['lost', 'Not solved'];
   return ['', 'In progress'];
 }
-function renderArchive() {
-  showView('archive');
-  const first = today.epochDay - today.number + 1;
-  const days = [];
-  for (let e = today.epochDay; e >= first; e--) days.push(infoFromEpoch(e));
-  const hasPast = days.length > 1;
-  $('archEmpty').hidden = hasPast;
-  $('archList').hidden = !hasPast;
-  if (!hasPast) {
-    $('archEmptyText').textContent = `Past puzzles appear here once their day has passed. Today's is #${today.number}.`;
-    return;
-  }
-  const lat = curGame === 'lattice';
-  $('archList').innerHTML = days.map((d) => {
-    const [cls, label] = lat ? XolveLatticeUI.archiveStatus(d) : archiveStatus(d);
-    const lvl = lat ? XolveLatticeUI.levelIndex(d.epochDay) : DIFFICULTIES.indexOf(d.difficulty);
-    const lvlName = lat ? XolveLatticeUI.levelName(d.epochDay) : LEVEL_NAMES[d.difficulty];
-    const pips = [0, 1, 2, 3].map((i) => `<span${i <= lvl ? ' class="on"' : ''}></span>`).join('');
-    const when = d.epochDay === today.epochDay ? 'Today' : fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' });
-    return `<li><button class="arch-row" data-epoch="${d.epochDay}" aria-label="${lat ? 'Lattice' : 'Puzzle'} ${d.number}, ${when}, ${lvlName}, ${label}"><span class="an">#${d.number}</span><span>${when}</span><span class="pips" aria-hidden="true">${pips}</span><span class="as ${cls}">${label}</span></button></li>`;
-  }).join('');
-}
-
 /* ---------- rendering ---------- */
 function render() {
   const p = game.puzzle;
@@ -141,6 +88,7 @@ function render() {
       ? `${fmtDay(game.info, { weekday: 'short', day: 'numeric', month: 'short' })}, ${LEVEL_NAMES[p.difficulty].toLowerCase()}`
       : LEVEL_NAMES[p.difficulty];
   [...$('pips').children].forEach((el, i) => el.classList.toggle('on', i <= lvl));
+  $('btnBack').hidden = game.kind !== 'archive';
 
   const eq = $('equation');
   eq.innerHTML = `${toHTML(p.expression)}<span class="eqs">=</span>${toHTML(p.rightHandSide)}`;
@@ -314,22 +262,17 @@ function recordStats(won) {
 /* ---------- timer (only runs while the page is visible) ---------- */
 function tick() {
   const now = performance.now();
-  if (game && game.status === 'playing' && !document.hidden && !$('sheet').hidden) {
+  if (isOpen && game && game.status === 'playing' && !document.hidden) {
     game.elapsed += now - lastTick;
     $('timeStat').textContent = fmtTime(game.elapsed);
     if (++saveCounter % 20 === 0) saveGame();
   }
   lastTick = now;
-  const current = dayInfo(nowDate());
-  if (today && current.epochDay !== today.epochDay) newDay(current);
-  else if (game && game.status !== 'playing') updateCountdown();
+  if (isOpen && game && game.status !== 'playing') updateCountdown();
 }
-/* Midnight in the player's time zone: switch to the new puzzle wherever they are. */
-function newDay(current) {
-  today = current;
-  if (curGame === 'algebra' && mode === 'daily') { saveGame(); startDaily(); toast(`Puzzle #${today.number} is live`); }
-  else if (mode === 'archive' && !$('archive').hidden) renderArchive();
-  XolveLatticeUI.newDay();
+/* Midnight in the player's time zone (the shell spots it): switch to the new puzzle. */
+function newDay() {
+  if (isOpen && game && game.kind === 'daily') { saveGame(); startDaily(); toast(`Puzzle #${today.number} is live`); }
 }
 document.addEventListener('visibilitychange', () => { lastTick = performance.now(); if (document.hidden) saveGame(); });
 window.addEventListener('pagehide', saveGame);
@@ -351,27 +294,9 @@ function shareText() {
     `${squares} ${won ? `${game.attempts.length}/6 in ${fmtTime(game.elapsed)}` : 'X/6'}`,
     streak && game.kind === 'daily' ? `🔥 ${streak}` : '', 'https://xolve.games'].filter(Boolean).join('\n');
 }
-function share() { copyText(shareText()); }
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast('Result copied'); return; } catch (e) {}
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
-  ta.remove();
-  if (ok) { toast('Result copied'); return; }
-  const box = document.createElement('textarea');
-  box.className = 'copybox'; box.value = text; box.setAttribute('readonly', '');
-  document.querySelectorAll('.copybox').forEach((b) => b.remove());
-  const host = curGame === 'lattice' ? $('latResult') : $('result');
-  host.appendChild(box); box.select();
-  toast('Copy the result below');
-}
-let toastTimer;
-function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800); }
-
-/* ---------- statistics dialog ---------- */
-function openStats() {
+function share() { deps.share(shareText()); }
+/* ---------- statistics (the shell opens the dialog) ---------- */
+function renderStats() {
   const st = loadStats();
   const pct = st.played ? Math.round((st.won / st.played) * 100) : 0;
   const avgA = st.won ? (st.totalAttempts / st.won).toFixed(1) : '0';
@@ -386,86 +311,50 @@ function openStats() {
     const b = st.byDiff[d];
     return `<div class="bar-row"><span>${LEVEL_NAMES[d]}</span><span class="bar" role="img" aria-label="${b.won} of ${b.played} solved"><i style="width:${(b.won / maxPlayed) * 100}%"></i></span><span class="v">${b.won}/${b.played}</span></div>`;
   }).join('');
-  XolveLatticeUI.renderStats($('latStats'), $('latDist'));
-  $('dlgStats').showModal();
 }
 
-/* ---------- events ---------- */
-$('btnCheck').addEventListener('click', submit);
-$('guess').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-$('btnReveal').addEventListener('click', () => {
-  if (!revealArmed) { revealArmed = true; $('btnReveal').textContent = game.kind === 'daily' ? 'Tap again to reveal (counts as a loss)' : 'Tap again to reveal'; $('btnReveal').classList.add('arm'); return; }
-  finish('lost');
-});
-$('btnShare').addEventListener('click', share);
-$('btnNew').addEventListener('click', startPractice);
-$('btnPractice').addEventListener('click', () => go('algebra', 'practice'));
-$('btnBack').addEventListener('click', () => { saveGame(); renderArchive(); });
-$('btnArchiveBack').addEventListener('click', () => { saveGame(); renderArchive(); });
-$('btnToday').addEventListener('click', () => go(curGame, 'daily'));
-$('archList').addEventListener('click', (e) => {
-  const b = e.target.closest('.arch-row'); if (!b) return;
-  const ep = +b.dataset.epoch;
-  if (ep === today.epochDay) go(curGame, 'daily');
-  else if (curGame === 'lattice') { showView('lattice'); XolveLatticeUI.open('archive', ep); }
-  else startArchivePuzzle(ep);
-});
-$('btnStats').addEventListener('click', openStats);
-$('btnHelp').addEventListener('click', () => (curGame === 'lattice' ? XolveLatticeUI.openHelp() : $('dlgHelp').showModal()));
-$('btnBook').addEventListener('click', () => (curGame === 'lattice' ? XolveLatticeUI.openHelp() : $('dlgBook').showModal()));
-$('btnHint').addEventListener('click', useHint);
-$('btnHome').addEventListener('click', () => {
-  document.querySelectorAll('dialog[open]').forEach((d) => d.close());
-  go('algebra', 'daily');
-  window.scrollTo({ top: 0 });
-});
-document.querySelectorAll('dialog').forEach((d) => {
-  d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
-});
-/* ---------- navigation: pick a game, then Today / Archive / Practice ---------- */
-const LEVELS_FOR = { algebra: ['easy', 'medium', 'hard', 'expert'], lattice: ['easy', 'medium', 'hard', 'extreme'] };
-function go(g, m) {
-  saveGame();
-  if (curGame === 'lattice') XolveLatticeUI.close();
-  curGame = g; mode = m;
-  document.querySelectorAll('.game').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.game === g)));
-  document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-  $('levels').hidden = m !== 'practice';
-  markLevel();
-  today = dayInfo(nowDate());
-  if (m === 'archive') renderArchive();
-  else if (g === 'lattice') { showView('lattice'); XolveLatticeUI.open(m, m === 'practice' ? latticeLevel : undefined); }
-  else if (m === 'daily') startDaily();
-  else startPractice();
-}
-document.querySelectorAll('.game').forEach((b) => b.addEventListener('click', () => { if (b.dataset.game !== curGame) go(b.dataset.game, mode); }));
-document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => go(curGame, b.dataset.mode)));
-function markLevel() {
-  const list = LEVELS_FOR[curGame], current = curGame === 'lattice' ? latticeLevel : practiceLevel;
-  $('lastLevel').dataset.level = list[3];
-  $('lastLevel').textContent = curGame === 'lattice' ? 'Extreme' : 'Expert';
-  document.querySelectorAll('.level').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === current)));
-}
-document.querySelectorAll('.level').forEach((b) => b.addEventListener('click', () => {
-  if (curGame === 'lattice') {
-    latticeLevel = b.dataset.level; store.set('xolve:latticeLevel', latticeLevel); markLevel();
-    XolveLatticeUI.open('practice', latticeLevel);
-  } else {
-    practiceLevel = b.dataset.level; store.set('xolve:practiceLevel', practiceLevel); markLevel(); startPractice();
-  }
-}));
-window.addEventListener('resize', () => game && fitEquation());
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => game && fitEquation());
-
-/* ---------- boot ---------- */
-markLevel();
-$('sheet').hidden = true;
-syncClock().then(() => {
-  XolveLatticeUI.init({ store, nowDate, dayInfo, infoFromEpoch, toast, fmtTime, share: copyText, go });
-  startDaily();
+/* ---------- wiring ---------- */
+function init(d) {
+  deps = d;
+  $('btnCheck').addEventListener('click', submit);
+  $('guess').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  $('btnReveal').addEventListener('click', () => {
+    if (!revealArmed) { revealArmed = true; $('btnReveal').textContent = game.kind === 'daily' ? 'Tap again to reveal (counts as a loss)' : 'Tap again to reveal'; $('btnReveal').classList.add('arm'); return; }
+    finish('lost');
+  });
+  $('btnShare').addEventListener('click', share);
+  $('btnNew').addEventListener('click', () => startPractice(game.puzzle.difficulty));
+  $('btnPractice').addEventListener('click', () => deps.go('algebra', 'practice'));
+  $('btnBack').addEventListener('click', () => deps.go('algebra', 'archive'));
+  $('btnArchiveBack').addEventListener('click', () => deps.go('algebra', 'archive'));
+  $('btnHint').addEventListener('click', useHint);
+  document.addEventListener('visibilitychange', () => { lastTick = performance.now(); if (document.hidden) saveGame(); });
+  window.addEventListener('pagehide', saveGame);
+  window.addEventListener('resize', () => isOpen && game && fitEquation());
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => isOpen && game && fitEquation());
   lastTick = performance.now();
   setInterval(tick, 250);
-  setInterval(syncClock, 15 * 60 * 1000);
+}
+/* open('daily'), open('archive', epochDay) or open('practice', level) */
+function open(kind, arg) {
+  isOpen = true;
+  lastTick = performance.now();
+  if (kind === 'daily') startDaily();
+  else if (kind === 'archive') startArchivePuzzle(arg);
+  else startPractice(arg || 'medium');
   if (!store.get('xolve:seenHelp')) { store.set('xolve:seenHelp', true); $('dlgHelp').showModal(); }
+}
+function close() { saveGame(); isOpen = false; revealArmed = false; $('btnBack').hidden = true; }
+
+XolveShell.register('algebra', {
+  name: 'Algebra', view: 'sheet', archiveLabel: 'Puzzle', levelKey: 'xolve:practiceLevel',
+  levels: DIFFICULTIES.map((id) => ({ id, name: LEVEL_NAMES[id] })),
+  init, open, close, newDay, renderStats,
+  archiveStatus,
+  levelIndex: (epochDay) => DIFFICULTIES.indexOf(infoFromEpoch(epochDay).difficulty),
+  levelName: (epochDay) => LEVEL_NAMES[infoFromEpoch(epochDay).difficulty],
+  openHelp: () => $('dlgHelp').showModal(),
+  openBook: () => $('dlgBook').showModal(),
+  resultHost: () => $('result'),
 });
 })();
