@@ -355,7 +355,7 @@
       : o === 'closest'
         ? [`I got ${b.value} in today's Xolve countdown`, `🎯 ${p.target}, ${off(b.value)} away`]
         : ["I ran out of time on today's Xolve countdown", `🎯 ${p.target}`];
-    return [`XOLVE Countdown #${state.info.number}`, ...lines, o === 'exact' && streak ? `🔥 ${streak}` : '', 'https://xolve.games'].filter(Boolean).join('\n');
+    return [`XOLVE Countdown #${state.info.number}`, ...lines, o === 'exact' && streak ? `🔥 ${streak}` : '', deps.linkFor('countdown')].filter(Boolean).join('\n');
   }
 
   /* ---------- clock ---------- */

@@ -345,7 +345,7 @@
     return [`XOLVE Lattice #${state.info.number} (${X.LEVELS[P().level].name}${state.kind === 'archive' ? ', archive' : ''})`,
       won ? `✅ Solved in ${deps.fmtTime(state.elapsed)}` : '❌ Not solved',
       `${'💡'.repeat(h) || 'No hints'}${state.checks ? `, ${state.checks} ${state.checks === 1 ? 'check' : 'checks'}` : ''}`,
-      liveStreak(loadStats()) && won && state.kind === 'daily' ? `🔥 ${liveStreak(loadStats())}` : '', 'https://xolve.games'].filter(Boolean).join('\n');
+      liveStreak(loadStats()) && won && state.kind === 'daily' ? `🔥 ${liveStreak(loadStats())}` : '', deps.linkFor('lattice')].filter(Boolean).join('\n');
   }
 
   /* ---------- timer ---------- */

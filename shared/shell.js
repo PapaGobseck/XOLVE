@@ -71,6 +71,30 @@ const XolveShell = (() => {
   function register(id, game) { games[id] = game; order.push(id); }
 
   let curGame = null, mode = 'daily', today = null;
+
+  /* ---------- each game's address ----------
+     Algebra is the home page; the others have their own path. The server (worker.js)
+     sends each path its own title and link-preview card. Keep the two lists in step. */
+  const PATHS = { algebra: '/', lattice: '/lattice', countdown: '/countdown' };
+  const TITLES = {
+    algebra: 'XOLVE: a daily algebra puzzle',
+    lattice: 'XOLVE Lattice: a daily multiplication puzzle',
+    countdown: 'XOLVE Countdown: a daily numbers puzzle',
+  };
+  const served = /^https?:$/.test(location.protocol); // addresses only mean anything over HTTP
+  function gameFromPath() {
+    if (!served) return null;
+    const p = location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    return Object.keys(PATHS).find((g) => PATHS[g] === p && games[g]) || null;
+  }
+  /* Point the address bar at game g. push: true adds a history entry (a tab tap), false replaces it. */
+  function setAddress(g, push) {
+    if (TITLES[g]) document.title = TITLES[g];
+    if (!served || !PATHS[g] || location.pathname === PATHS[g]) return;
+    try { history[push ? 'pushState' : 'replaceState']({ game: g }, '', PATHS[g] + location.search); } catch (e) {}
+  }
+  /* Full link to a game, for share text. */
+  const linkFor = (g) => 'https://xolve.games' + (PATHS[g] === '/' ? '' : PATHS[g]);
   /* The saved practice level, or medium (or the game's first level if it has no medium). */
   function levelFor(g) {
     const ids = (games[g].levels || []).map((l) => l.id), saved = store.get(games[g].levelKey);
@@ -84,8 +108,9 @@ const XolveShell = (() => {
   }
 
   /* ---------- navigation: pick a game, then Today / Archive / Practice ---------- */
-  function go(g, m) {
+  function go(g, m, push) {
     if (curGame) games[curGame].close();
+    setAddress(g, push !== false && curGame !== null && g !== curGame);
     if (m === 'practice' && games[g].practice === false) m = 'daily';
     curGame = g; mode = m;
     document.querySelector('.mode[data-mode="practice"]').hidden = games[g].practice === false;
@@ -189,6 +214,11 @@ const XolveShell = (() => {
     $('btnHelp').addEventListener('click', () => games[curGame].openHelp());
     $('btnBook').addEventListener('click', () => games[curGame].openBook());
     $('btnTheme').addEventListener('click', toggleTheme);
+    /* Back and forward between games. */
+    window.addEventListener('popstate', () => {
+      const g = gameFromPath() || order[0];
+      if (g !== curGame) go(g, mode === 'practice' && games[g].practice === false ? 'daily' : mode, false);
+    });
     darkQuery.addEventListener('change', applyTheme);
     $('introHow').addEventListener('click', () => games[curGame].openHelp());
     $('introClose').addEventListener('click', dismissIntro);
@@ -209,9 +239,9 @@ const XolveShell = (() => {
     $('intro').hidden = !!introSeen();
     wire();
     syncClock().then(() => {
-      const deps = { store, nowDate, dayInfo: Cal.dayInfo, infoFromEpoch: Cal.infoFromEpoch, toast, fmtTime, fmtDay, share: copyText, go };
+      const deps = { store, nowDate, dayInfo: Cal.dayInfo, infoFromEpoch: Cal.infoFromEpoch, toast, fmtTime, fmtDay, share: copyText, go, linkFor };
       order.forEach((g) => games[g].init(deps));
-      go(order[0], 'daily');
+      go(gameFromPath() || order[0], 'daily', false);
       setInterval(tick, 1000);
       setInterval(syncClock, 15 * 60 * 1000);
     });

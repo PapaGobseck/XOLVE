@@ -39,17 +39,27 @@ Each game lives in its own folder, and everything they share lives in `shared/`.
 | `tests/algebra.test.js` | Checks that algebra puzzles and their worked solutions are correct |
 | `tests/lattice.test.js` | Checks that every Lattice puzzle has exactly one solution and correct steps |
 | `tests/countdown.test.js` | Checks ten years of Countdown puzzles and the answer checker's rules |
-| `images/` | Icons and the link-preview image |
+| `worker.js` | Gives `/lattice` and `/countdown` their own title, description and link-preview card (see below) |
+| `images/` | Icons and the link-preview images, one per game |
 | `wrangler.jsonc`, `.assetsignore` | Cloudflare Workers settings, and the files Cloudflare shouldn't publish |
 
 There's no build step and no dependencies.
+
+## Each game's address
+
+Algebra is the home page, `xolve.games`. Lattice is `xolve.games/lattice` and Countdown is `xolve.games/countdown`.
+
+- `shared/shell.js` opens the game that matches the address, and changes the address when you switch game tabs (Back and Forward work too). Each game's share text links to its own address.
+- Cloudflare serves every real file as-is. `worker.js` only runs for addresses that aren't files: for `/lattice` and `/countdown` it sends the same `index.html` with that game's title, description and preview image swapped in, so a shared link shows the right card in Discord and elsewhere. Anything else still gets a not-found page.
+- The list of addresses lives in two places, `PATHS` in `shared/shell.js` and `PAGES` in `worker.js`. Keep them in step.
 
 ### Adding a game
 
 1. Create a folder for it, such as `countdown/`, with an `engine.js` for the puzzles and an `app.js` for the screen.
 2. In `app.js`, call `XolveShell.register()` with the game's screen, levels and functions. The comment at the top of `shared/shell.js` lists what the shell expects, and `lattice/app.js` is a complete example.
 3. Add the game's screen and a tab button (`<button class="game" data-game="...">`) to `index.html`, and its two `<script>` tags after the existing games.
-4. Add a test file to `tests/`.
+4. Give it an address: add it to `PATHS` and `TITLES` in `shared/shell.js`, to `PAGES` in `worker.js`, and to `sitemap.xml`, and make a 1200 × 630 preview image in `images/`.
+5. Add a test file to `tests/`.
 
 ## Running it locally
 
@@ -59,7 +69,11 @@ Opening `index.html` directly works, but the clock check needs the page to be se
 python -m http.server 8000
 ```
 
-Then open http://localhost:8000.
+Then open http://localhost:8000. This simple server doesn't run `worker.js`, so it only knows the home page: use the game tabs to switch games, and refresh from the home page. To try `/lattice` and `/countdown` exactly as they run live, use Cloudflare's local server instead (needs Node.js):
+
+```
+npx wrangler dev
+```
 
 ## Deploying
 
