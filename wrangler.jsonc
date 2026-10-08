@@ -4,7 +4,10 @@
   "workers_dev": false,
   "preview_urls": true,
   "previews": {},
+  // worker.js only runs for addresses that aren't files (/lattice, /countdown).
+  "main": "worker.js",
   "assets": {
-    "directory": "./"
+    "directory": "./",
+    "binding": "ASSETS"
   }
 }
